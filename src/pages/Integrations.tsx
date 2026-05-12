@@ -281,6 +281,9 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                     <Switch checked={!!editConfig[field.key]} onCheckedChange={(v) => setEditConfig({ ...editConfig, [field.key]: v })} />
                     <span className="text-xs text-muted-foreground">{editConfig[field.key] ? "Sim" : "Não"}</span>
                   </div>
+                ) : field.type === "textarea" ? (
+                  <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
+                    placeholder={field.placeholder} className="text-xs min-h-[80px]" />
                 ) : (
                   <Input value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="h-8 text-xs" />

@@ -270,6 +270,14 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {editProvider === "gmail" && (
+              <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                Antes de criar as credenciais, habilite a Gmail API:{" "}
+                <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+                  Ativar Gmail API
+                </a>
+              </div>
+            )}
             {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (
               <div key={field.key} className="space-y-1">
                 <Label className="text-xs">{field.label}</Label>

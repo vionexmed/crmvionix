@@ -110,6 +110,24 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
+    if (provider === "gmail") {
+      const { client_id, client_secret, refresh_token } = editConfig || {};
+      if (!client_id || !client_secret || !refresh_token) {
+        toast({ title: "Preencha Client ID, Client Secret e Refresh Token", variant: "destructive" });
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("gmail-connect", {
+        body: { org_id: orgId, config: editConfig },
+      });
+      if (error || data?.error) {
+        toast({ title: "Falha ao validar Gmail", description: data?.message || error?.message || "Verifique as credenciais", variant: "destructive" });
+        return;
+      }
+      toast({ title: `Gmail conectado: ${data.email}` });
+      setEditProvider(null);
+      fetchConfigs();
+      return;
+    }
     const existing = getConfig(provider);
     if (existing) {
       await supabase.from("integration_configs").update({ config: editConfig, is_active: true } as any).eq("id", existing.id);
@@ -130,9 +148,6 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const [slackChannels, setSlackChannels] = useState<{ id: string; name: string }[]>([]);
   const [slackWorkspace, setSlackWorkspace] = useState<string | null>(null);
   const [slackSetupGuide, setSlackSetupGuide] = useState(false);
-  const [gmailConnecting, setGmailConnecting] = useState(false);
-  const [gmailSetupGuide, setGmailSetupGuide] = useState(false);
-  const [gmailAddress, setGmailAddress] = useState<string | null>(null);
 
   const handleSlackConnect = async () => {
     if (!orgId) return;
@@ -161,37 +176,16 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
     setSlackConnecting(false);
   };
 
-  const handleGmailConnect = async () => {
-    if (!orgId) return;
-    setGmailConnecting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("gmail-connect", {
-        body: { org_id: orgId },
-      });
-      if (error) throw error;
-      if (data?.email) {
-        setGmailAddress(data.email);
-        toast({ title: `Gmail conectado: ${data.email}` });
-        fetchConfigs();
-      } else {
-        setGmailSetupGuide(true);
-      }
-    } catch {
-      setGmailSetupGuide(true);
-    }
-    setGmailConnecting(false);
-  };
-
   const integrations = [
     {
-      provider: "gmail", name: "Gmail", icon: Mail,
-      description: "Enviar e receber emails de uma conta Gmail dedicada",
-      connectAction: handleGmailConnect,
-      connectLoading: gmailConnecting,
+      provider: "gmail", name: "Gmail (OAuth2)", icon: Mail,
+      description: "Conta Gmail dedicada via Google API (Client ID + Refresh Token)",
       fields: [
+        { key: "client_id", label: "Client ID", placeholder: "xxxxx.apps.googleusercontent.com" },
+        { key: "client_secret", label: "Client Secret", placeholder: "GOCSPX-..." },
+        { key: "refresh_token", label: "Refresh Token", placeholder: "1//0g..." },
         { key: "from_name", label: "Nome de exibição", placeholder: "Equipe Comercial — VIONEX" },
-        { key: "signature", label: "Assinatura padrão", placeholder: "—\\nVIONEX", type: "textarea" as const },
-        { key: "notify_replies", label: "Notificar quando receber resposta", type: "switch" },
+        { key: "signature", label: "Assinatura padrão", placeholder: "—\nVIONEX", type: "textarea" as const },
       ],
     },
     {
@@ -285,8 +279,13 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                   <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="text-xs min-h-[80px]" />
                 ) : (
-                  <Input value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
-                    placeholder={field.placeholder} className="h-8 text-xs" />
+                  <Input
+                    type={["client_secret", "refresh_token"].includes(field.key) ? "password" : "text"}
+                    value={editConfig[field.key] || ""}
+                    onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
+                    placeholder={field.placeholder}
+                    className="h-8 text-xs"
+                  />
                 )}
               </div>
             ))}
@@ -355,64 +354,6 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setSlackSetupGuide(false)}>Fechar</Button>
             <Button size="sm" onClick={() => { setSlackSetupGuide(false); handleSlackConnect(); }}>
-              <RefreshCw className="mr-1 h-3 w-3" /> Tentar novamente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Gmail Setup Guide */}
-      <Dialog open={gmailSetupGuide} onOpenChange={setGmailSetupGuide}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2">
-              <Mail className="h-5 w-5 text-primary" />
-              Conectar Gmail
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              O Gmail é conectado via Lovable Connectors. Pode ser uma conta diferente da que você usa para login no VIONEX.
-            </p>
-            <div className="space-y-3">
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
-                <div>
-                  <p className="text-sm font-medium">Abra Connectors no Lovable</p>
-                  <p className="text-xs text-muted-foreground">Nome do projeto (canto superior esquerdo) → "Settings" → "Connectors"</p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
-                <div>
-                  <p className="text-sm font-medium">Procure por "Gmail" e clique em Connect</p>
-                  <p className="text-xs text-muted-foreground">Faça login na conta Gmail que será usada para enviar e receber emails do CRM</p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
-                <div>
-                  <p className="text-sm font-medium">Autorize as permissões de leitura e envio</p>
-                  <p className="text-xs text-muted-foreground">São necessários os escopos <code className="text-[10px] bg-muted px-1 rounded">gmail.readonly</code>, <code className="text-[10px] bg-muted px-1 rounded">gmail.send</code> e <code className="text-[10px] bg-muted px-1 rounded">gmail.modify</code></p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">4</span>
-                <div>
-                  <p className="text-sm font-medium">Volte aqui e clique em Conectar</p>
-                  <p className="text-xs text-muted-foreground">O VIONEX detectará a conta automaticamente</p>
-                </div>
-              </div>
-            </div>
-            {gmailAddress && (
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
-                <p className="text-xs"><strong>Conta vinculada:</strong> {gmailAddress}</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setGmailSetupGuide(false)}>Fechar</Button>
-            <Button size="sm" onClick={() => { setGmailSetupGuide(false); handleGmailConnect(); }}>
               <RefreshCw className="mr-1 h-3 w-3" /> Tentar novamente
             </Button>
           </DialogFooter>

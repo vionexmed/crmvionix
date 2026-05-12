@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { BarChart3 as BarChart3Icon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

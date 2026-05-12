@@ -10,7 +10,7 @@ export default function MediaSocial() {
       <PageHeader
         kicker="Conteúdo"
         title="Mídia Rede Social"
-        description="Acesse o gerador de carrosséis e veja abaixo as gerações salvas no projeto."
+        description="Acesse o gerador de carrosséis e veja abaixo os carrosséis salvos no projeto."
         icon={Images}
         pattern="sparkle"
         actions={

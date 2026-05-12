@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Users as UsersIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";

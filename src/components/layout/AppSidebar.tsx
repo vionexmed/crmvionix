@@ -16,6 +16,7 @@ import {
   Plug,
   Shield,
   Handshake,
+  Images,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";

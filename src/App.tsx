@@ -33,7 +33,6 @@ const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const SalesGoals = lazy(() => import("./pages/SalesGoals"));
 const Team = lazy(() => import("./pages/Team"));
 const Setup = lazy(() => import("./pages/Setup"));
-const MediaSocial = lazy(() => import("./pages/MediaSocial"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,7 +84,6 @@ const App = () => (
                 <Route path="/activities" element={<SuspenseRoute><Activities /></SuspenseRoute>} />
                 <Route path="/tasks" element={<SuspenseRoute><Tasks /></SuspenseRoute>} />
                 <Route path="/inbox" element={<SuspenseRoute><Inbox /></SuspenseRoute>} />
-                <Route path="/media-social" element={<SuspenseRoute><MediaSocial /></SuspenseRoute>} />
                 <Route path="/email-templates" element={<SuspenseRoute><EmailTemplates /></SuspenseRoute>} />
                 <Route path="/email-sequences" element={<SuspenseRoute><EmailSequences /></SuspenseRoute>} />
                 <Route path="/lead-scoring" element={<SuspenseRoute><LeadScoring /></SuspenseRoute>} />

@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import {
   MessageSquare, Webhook, Key, Code, Plus, Trash2, Copy,
-  Check, ExternalLink, RefreshCw, Eye, EyeOff, Loader2, Globe,
+  Check, ExternalLink, RefreshCw, Eye, EyeOff, Loader2, Globe, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 

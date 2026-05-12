@@ -51,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <Button variant="outline" size="sm" onClick={() => {
               const subject = encodeURIComponent(`Bug Report: ${this.state.errorId}`);
               const body = encodeURIComponent(`Erro: ${this.state.error?.message}\n\nID: ${this.state.errorId}\nURL: ${window.location.href}`);
-              window.open(`mailto:suporte@flowcrm.com?subject=${subject}&body=${body}`);
+              window.open(`mailto:suporte@vionex.com?subject=${subject}&body=${body}`);
             }}>
               <Bug className="mr-2 h-4 w-4" />Reportar
             </Button>

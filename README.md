@@ -1,4 +1,4 @@
-# FlowCRM
+# VIONEX
 
 CRM B2B completo com AI nativa, pipeline visual e automações.
 
@@ -14,7 +14,7 @@ CRM B2B completo com AI nativa, pipeline visual e automações.
 ```bash
 # Clonar o repositório
 git clone <YOUR_GIT_URL>
-cd flowcrm
+cd vionex
 
 # Instalar dependências
 npm install

@@ -271,7 +271,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Para conectar o Slack ao FlowCRM, siga os passos abaixo:
+              Para conectar o Slack ao VIONEX, siga os passos abaixo:
             </p>
 
             <div className="space-y-3">
@@ -303,7 +303,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">4</span>
                 <div>
                   <p className="text-sm font-medium">Volte aqui e clique em "Conectar"</p>
-                  <p className="text-xs text-muted-foreground">Após vincular o conector, o FlowCRM detectará automaticamente seus canais</p>
+                  <p className="text-xs text-muted-foreground">Após vincular o conector, o VIONEX detectará automaticamente seus canais</p>
                 </div>
               </div>
             </div>
@@ -684,7 +684,7 @@ function TrackingTab({ orgId }: { orgId: string | null }) {
   const [copied, setCopied] = useState(false);
 
   const trackingUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tracking`;
-  const snippet = `<!-- FlowCRM Tracking -->
+  const snippet = `<!-- VIONEX Tracking -->
 <script>
 (function() {
   var ORG_ID = "${orgId || 'SEU_ORG_ID'}";
@@ -719,7 +719,7 @@ function TrackingTab({ orgId }: { orgId: string | null }) {
   };
 
   // Expose for custom events
-  window.FlowCRM = {
+  window.VIONEX = {
     track: track,
     identify: function(email) {
       vid = email;
@@ -768,8 +768,8 @@ function TrackingTab({ orgId }: { orgId: string | null }) {
             <p className="text-xs font-medium">Como funciona:</p>
             <ul className="text-[10px] text-muted-foreground space-y-1">
               <li>• <strong>Pageviews</strong> são registrados automaticamente como atividades</li>
-              <li>• <strong>Identificação</strong>: chame <code className="bg-muted px-1 rounded">FlowCRM.identify("email@exemplo.com")</code> após formulários</li>
-              <li>• <strong>Eventos customizados</strong>: <code className="bg-muted px-1 rounded">{'FlowCRM.track("demo_request", {"plan": "pro"})'}</code></li>
+              <li>• <strong>Identificação</strong>: chame <code className="bg-muted px-1 rounded">VIONEX.identify("email@exemplo.com")</code> após formulários</li>
+              <li>• <strong>Eventos customizados</strong>: <code className="bg-muted px-1 rounded">{'VIONEX.track("demo_request", {"plan": "pro"})'}</code></li>
               <li>• <strong>Lead Score</strong>: +1 ponto por pageview, +5 por identify, +10 por evento customizado</li>
               <li>• Suporte a SPA (intercepta <code className="bg-muted px-1 rounded">history.pushState</code>)</li>
             </ul>

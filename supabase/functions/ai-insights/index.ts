@@ -72,7 +72,7 @@ DADOS DO CRM (org ${org_id}):
         messages: [
           {
             role: "system",
-            content: `Você é o motor de insights do FlowCRM. Analise os dados e gere exatamente 4-6 insights acionáveis em português brasileiro.`,
+            content: `Você é o motor de insights do VIONEX. Analise os dados e gere exatamente 4-6 insights acionáveis em português brasileiro.`,
           },
           {
             role: "user",

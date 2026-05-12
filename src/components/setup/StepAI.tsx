@@ -16,7 +16,7 @@ export function StepAI({ orgId, onComplete, setStepData }: SetupStepProps) {
     setTesting(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-copilot", {
-        body: { prompt: "Diga 'FlowCRM AI ativo!' em uma frase curta.", context: "test" },
+        body: { prompt: "Diga 'VIONEX AI ativo!' em uma frase curta.", context: "test" },
       });
       if (error) throw error;
       setTested(true);

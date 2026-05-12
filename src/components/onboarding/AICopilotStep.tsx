@@ -59,7 +59,7 @@ export function AICopilotStep({ orgId, setCanContinue, setStepData }: Onboarding
       <div>
         <h3 className="text-xl font-bold">Ative o AI Copilot</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          O FlowCRM usa Claude da Anthropic para gerar emails, analisar negócios e sugerir próximos passos.
+          O VIONEX usa Claude da Anthropic para gerar emails, analisar negócios e sugerir próximos passos.
         </p>
       </div>
 

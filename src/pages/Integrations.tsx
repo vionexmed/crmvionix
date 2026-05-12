@@ -354,7 +354,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+    </div>
   );
 }
 function WebhooksTab({ orgId }: { orgId: string | null }) {

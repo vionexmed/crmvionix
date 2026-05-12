@@ -233,7 +233,11 @@ export default function Inbox() {
               {unreadCount > 0 && <Badge variant="destructive" className="text-[10px] px-1.5">{unreadCount}</Badge>}
             </div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={fetchData}><RefreshCw className="h-3.5 w-3.5" /></Button>
+              <Button variant="ghost" size="sm" onClick={fetchData} title="Recarregar"><RefreshCw className="h-3.5 w-3.5" /></Button>
+              <Button variant="outline" size="sm" onClick={syncGmail} disabled={syncing} title="Buscar emails recebidos do Gmail">
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Sincronizando..." : "Sincronizar Gmail"}
+              </Button>
               <Button size="sm" onClick={() => setComposeOpen(true)}><Send className="mr-1.5 h-3.5 w-3.5" />Compor</Button>
             </div>
           </div>

@@ -33,7 +33,6 @@ const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const SalesGoals = lazy(() => import("./pages/SalesGoals"));
 const Team = lazy(() => import("./pages/Team"));
 const Setup = lazy(() => import("./pages/Setup"));
-const MediaSocial = lazy(() => import("./pages/MediaSocial"));
 
 const queryClient = new QueryClient({
   defaultOptions: {

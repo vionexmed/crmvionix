@@ -80,6 +80,7 @@ export default function Inbox() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<TabMode>("inbox");
+  const [syncing, setSyncing] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!orgId) return;

@@ -90,6 +90,16 @@
     letter-spacing: -0.02em;
   }
 
+  /* Tabular figures for numeric data */
+  .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
   /* Keyboard focus ring */
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;

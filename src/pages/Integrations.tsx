@@ -182,11 +182,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
       description: "Conta Gmail dedicada via Google API (Client ID + Refresh Token)",
       fields: [
         { key: "client_id", label: "Client ID", placeholder: "xxxxx.apps.googleusercontent.com",
-          helpText: "Onde pegar:", helpUrl: "https://console.cloud.google.com/apis/credentials", helpLabel: "Google Cloud Console → Credenciais" },
+          helpText: "Crie em:", helpUrl: "https://console.cloud.google.com/apis/credentials/oauthclient", helpLabel: "Google Cloud Console → Criar OAuth Client" },
         { key: "client_secret", label: "Client Secret", placeholder: "GOCSPX-...",
-          helpText: "Mesmo local do Client ID:", helpUrl: "https://console.cloud.google.com/apis/credentials", helpLabel: "Google Cloud Console → Credenciais" },
+          helpText: "Mesmo local do Client ID:", helpUrl: "https://console.cloud.google.com/apis/credentials/oauthclient", helpLabel: "Google Cloud Console → Criar OAuth Client" },
         { key: "refresh_token", label: "Refresh Token", placeholder: "1//0g...",
-          helpText: "Gere em:", helpUrl: "https://developers.google.com/oauthplayground", helpLabel: "OAuth 2.0 Playground" },
+          helpText: "Gere em:", helpUrl: "https://developers.google.com/oauthplayground/", helpLabel: "OAuth 2.0 Playground" },
         { key: "from_name", label: "Nome de exibição", placeholder: "Equipe Comercial — VIONEX" },
         { key: "signature", label: "Assinatura padrão", placeholder: "—\nVIONEX", type: "textarea" as const },
       ],
@@ -270,6 +270,14 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {editProvider === "gmail" && (
+              <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                Antes de criar as credenciais, habilite a Gmail API:{" "}
+                <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+                  Ativar Gmail API
+                </a>
+              </div>
+            )}
             {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (
               <div key={field.key} className="space-y-1">
                 <Label className="text-xs">{field.label}</Label>

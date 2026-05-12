@@ -1,56 +1,22 @@
+## Problema
+Os links abaixo dos campos Client ID / Client Secret / Refresh Token na configuração do Gmail estão abrindo páginas inválidas (provavelmente 404 ou redirecionamento para o seletor de projeto sem contexto).
 
-# Rebrand para VIONEX
+## Correção proposta em `src/pages/Integrations.tsx`
 
-Aplicar identidade visual da VIONEX (logo + paleta) em todo o sistema.
+Trocar as URLs dos três campos OAuth por endereços oficiais e estáveis:
 
-## Paleta oficial
+- **Client ID** e **Client Secret** → `https://console.cloud.google.com/apis/credentials/oauthclient`  
+  (página direta de criação de OAuth Client; força login/seleção de projeto se necessário)
+  
+- **Refresh Token** → `https://developers.google.com/oauthplayground/`  
+  (com a barra final, que é a URL canônica do Playground)
 
-| Token | Hex | HSL | Uso |
-|---|---|---|---|
-| Navy Profundo | #0A1E3D | 217 72% 14% | Sidebar (tema claro), foreground escuro, dark bg |
-| Teal Institucional | #007B8A | 186 100% 27% | Primary (tema claro), botões, links, ring |
-| Teal Claro | #00A3B5 | 187 100% 35% | Primary (tema escuro), hover, accent secundário |
-| Branco | #FFFFFF | 0 0% 100% | Background claro, primary-foreground |
-| Grafite | #3A3F47 | 218 10% 25% | Texto secundário, muted-foreground |
+Adicionalmente:
+- Adicionar um 4º campo de ajuda apontando para a habilitação da Gmail API:  
+  `https://console.cloud.google.com/apis/library/gmail.googleapis.com`  
+  exibido como nota no topo do diálogo (acima dos campos), já que sem habilitar a API o Client ID não funciona.
 
-## Mudanças
-
-### 1. Logo e nome
-- Copiar `user-uploads://05_vionex.png` → `src/assets/vionex-logo.png`
-- Substituir o ícone `Handshake` + texto "FlowCRM" no `AppSidebar.tsx` pelo logo importado
-- Atualizar `index.html` (`<title>`, meta description, favicon → logo VIONEX)
-- Buscar referências textuais a "FlowCRM" no projeto (Login, Setup, OnboardingModal, README) e trocar por "VIONEX"
-
-### 2. Tokens de cor — `src/index.css`
-Tema claro (`:root`):
-- `--background`: branco puro `0 0% 100%`
-- `--foreground` / `--card-foreground`: navy `217 72% 14%`
-- `--primary`: teal institucional `186 100% 27%` / `--primary-foreground` `0 0% 100%`
-- `--ring`: teal institucional
-- `--muted-foreground`: grafite `218 10% 25%`
-- Sidebar: `--sidebar-background` navy `217 72% 14%`, foreground branco, primary teal claro, accent navy mais claro
-
-Tema escuro (`.dark`):
-- `--background`: navy profundo `217 72% 14%`
-- `--card`: navy ligeiramente mais claro
-- `--primary`: teal claro `187 100% 35%`
-- Sidebar: navy mais escuro, primary teal claro
-
-### 3. Accent color padrão — `src/contexts/ThemeContext.tsx`
-- Adicionar/substituir entrada `teal` em `ACCENT_COLORS` com:
-  - light: `186 100% 27%` (Teal Institucional)
-  - dark: `187 100% 35%` (Teal Claro)
-  - ring: `186 100% 27%`
-- Mudar default do `accentColor` de `"blue"` para `"teal"`
-- Atualizar lista de cores selecionáveis em Settings (manter outras como opção)
-
-### 4. Favicon e manifesto
-- Gerar/copiar versão pequena do logo para `public/favicon.ico` (ou usar `.png`)
-- Atualizar `<link rel="icon">` em `index.html`
-
-## Não faz parte
-- Não alterar lógica de negócio, RLS, edge functions ou rotas
-- Não mexer em `client.ts`/`types.ts`
-- Memórias do projeto (Attio/Linear inspiração, Inter font, light default) permanecem
-
-Posso prosseguir?
+## Detalhes técnicos
+- Apenas alteração de strings `helpUrl` no array `integrations[0].fields`.
+- Inserir um pequeno bloco `<p>` informativo no `DialogContent` do diálogo de configuração, renderizado apenas quando `editProvider === "gmail"`.
+- Sem mudanças em edge functions ou lógica de negócio.

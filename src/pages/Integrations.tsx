@@ -110,6 +110,24 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
+    if (provider === "gmail") {
+      const { client_id, client_secret, refresh_token } = editConfig || {};
+      if (!client_id || !client_secret || !refresh_token) {
+        toast({ title: "Preencha Client ID, Client Secret e Refresh Token", variant: "destructive" });
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("gmail-connect", {
+        body: { org_id: orgId, config: editConfig },
+      });
+      if (error || data?.error) {
+        toast({ title: "Falha ao validar Gmail", description: data?.message || error?.message || "Verifique as credenciais", variant: "destructive" });
+        return;
+      }
+      toast({ title: `Gmail conectado: ${data.email}` });
+      setEditProvider(null);
+      fetchConfigs();
+      return;
+    }
     const existing = getConfig(provider);
     if (existing) {
       await supabase.from("integration_configs").update({ config: editConfig, is_active: true } as any).eq("id", existing.id);

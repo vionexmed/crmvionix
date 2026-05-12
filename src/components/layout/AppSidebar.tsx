@@ -141,25 +141,6 @@ export function AppSidebar() {
           </SidebarGroup>
           {renderNavGroup(emailItems, "Email")}
           {renderNavGroup(analyticsItems, "Analytics")}
-          <SidebarGroup>
-            <SidebarGroupContent>
-              {!collapsed && (
-                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Conteúdo
-                </p>
-              )}
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive("/media-social")} tooltip="Mídia Rede Social">
-                    <NavLink to="/media-social" className="hover:bg-accent/50" activeClassName="bg-accent text-accent-foreground font-medium">
-                      <Images className="h-4 w-4" />
-                      {!collapsed && <span>Mídia Rede Social</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
           {renderNavGroup(adminItems, "Admin")}
         </SidebarContent>
         <SidebarFooter className="border-t border-border p-3">

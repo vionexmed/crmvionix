@@ -6,16 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function getAccessToken(client_id: string, client_secret: string, refresh_token: string) {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id, client_secret, refresh_token, grant_type: "refresh_token" }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.error || "token_exchange_failed");
-  return data.access_token as string;
-}
+const GATEWAY_URL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
 
 function encodeRaw(opts: { to: string; from: string; subject: string; html?: string; text?: string }) {
   const lines = [
@@ -44,6 +35,15 @@ serve(async (req) => {
       });
     }
 
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY");
+    if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
+      return new Response(JSON.stringify({ error: "gmail_not_linked" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -64,8 +64,6 @@ serve(async (req) => {
     }
 
     const c: any = cfg.config;
-    const access_token = await getAccessToken(c.client_id, c.client_secret, c.refresh_token);
-
     const fromEmail = c.email;
     const from = c.from_name ? `${c.from_name} <${fromEmail}>` : fromEmail;
     const finalHtml = html && c.signature ? `${html}<br/><br/>${(c.signature as string).replace(/\n/g, "<br/>")}` : html;
@@ -73,9 +71,13 @@ serve(async (req) => {
 
     const raw = encodeRaw({ to, from, subject, html: finalHtml, text: finalText });
 
-    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    const res = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ raw }),
     });
     const data = await res.json();

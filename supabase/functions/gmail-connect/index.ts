@@ -6,46 +6,35 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function exchangeRefreshToken(client_id: string, client_secret: string, refresh_token: string) {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id,
-      client_secret,
-      refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || data.error || "token_exchange_failed");
-  return data.access_token as string;
-}
+const GATEWAY_URL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { org_id, config } = await req.json();
-    if (!org_id || !config?.client_id || !config?.client_secret || !config?.refresh_token) {
-      return new Response(JSON.stringify({ error: "missing_fields" }), {
+    const { org_id, from_name, signature } = await req.json();
+    if (!org_id) {
+      return new Response(JSON.stringify({ error: "missing_org_id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    let access_token: string;
-    try {
-      access_token = await exchangeRefreshToken(config.client_id, config.client_secret, config.refresh_token);
-    } catch (e) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY");
+    if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "invalid_credentials", message: (e as Error).message }),
+        JSON.stringify({ error: "gmail_not_linked", message: "Gmail connector not linked to project" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
-      headers: { Authorization: `Bearer ${access_token}` },
+    // Verify by fetching the connected user's profile via Lovable gateway
+    const profileRes = await fetch(`${GATEWAY_URL}/users/me/profile`, {
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": GOOGLE_MAIL_API_KEY,
+      },
     });
     if (!profileRes.ok) {
       const text = await profileRes.text();
@@ -62,7 +51,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const merged = { ...config, email };
+    const merged = { email, from_name: from_name || null, signature: signature || null, mode: "connector" };
 
     const { data: existing } = await supabaseAdmin
       .from("integration_configs")

@@ -10,7 +10,7 @@ export default function MediaSocial() {
       <PageHeader
         kicker="Conteúdo"
         title="Mídia Rede Social"
-        description="Acesse o gerador de carrosséis e veja abaixo as gerações salvas no projeto."
+        description="Acesse o gerador de carrosséis e veja abaixo os carrosséis salvos no projeto."
         icon={Images}
         pattern="sparkle"
         actions={
@@ -25,7 +25,7 @@ export default function MediaSocial() {
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <p className="text-sm font-medium">Gerações salvas — Carrossel</p>
+          <p className="text-sm font-medium">Carrosséis salvos</p>
           <a
             href={CARROSSEL_URL}
             target="_blank"

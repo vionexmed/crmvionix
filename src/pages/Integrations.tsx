@@ -290,6 +290,14 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                     className="h-8 text-xs"
                   />
                 )}
+                {(field as any).helpUrl && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {(field as any).helpText}{" "}
+                    <a href={(field as any).helpUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+                      {(field as any).helpLabel}
+                    </a>
+                  </p>
+                )}
               </div>
             ))}
           </div>

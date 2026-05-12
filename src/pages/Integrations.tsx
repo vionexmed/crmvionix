@@ -355,64 +355,6 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
         </DialogContent>
       </Dialog>
 
-      {/* Gmail Setup Guide */}
-      <Dialog open={gmailSetupGuide} onOpenChange={setGmailSetupGuide}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2">
-              <Mail className="h-5 w-5 text-primary" />
-              Conectar Gmail
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              O Gmail é conectado via Lovable Connectors. Pode ser uma conta diferente da que você usa para login no VIONEX.
-            </p>
-            <div className="space-y-3">
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
-                <div>
-                  <p className="text-sm font-medium">Abra Connectors no Lovable</p>
-                  <p className="text-xs text-muted-foreground">Nome do projeto (canto superior esquerdo) → "Settings" → "Connectors"</p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
-                <div>
-                  <p className="text-sm font-medium">Procure por "Gmail" e clique em Connect</p>
-                  <p className="text-xs text-muted-foreground">Faça login na conta Gmail que será usada para enviar e receber emails do CRM</p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
-                <div>
-                  <p className="text-sm font-medium">Autorize as permissões de leitura e envio</p>
-                  <p className="text-xs text-muted-foreground">São necessários os escopos <code className="text-[10px] bg-muted px-1 rounded">gmail.readonly</code>, <code className="text-[10px] bg-muted px-1 rounded">gmail.send</code> e <code className="text-[10px] bg-muted px-1 rounded">gmail.modify</code></p>
-                </div>
-              </div>
-              <div className="flex gap-3 items-start">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">4</span>
-                <div>
-                  <p className="text-sm font-medium">Volte aqui e clique em Conectar</p>
-                  <p className="text-xs text-muted-foreground">O VIONEX detectará a conta automaticamente</p>
-                </div>
-              </div>
-            </div>
-            {gmailAddress && (
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
-                <p className="text-xs"><strong>Conta vinculada:</strong> {gmailAddress}</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setGmailSetupGuide(false)}>Fechar</Button>
-            <Button size="sm" onClick={() => { setGmailSetupGuide(false); handleGmailConnect(); }}>
-              <RefreshCw className="mr-1 h-3 w-3" /> Tentar novamente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
   );
 }
 function WebhooksTab({ orgId }: { orgId: string | null }) {

@@ -161,24 +161,39 @@ export default function Inbox() {
 
   const sendReply = async () => {
     if (!selectedEmail || !orgId || !replyBody.trim()) return;
-    await supabase.from("emails").insert({
-      org_id: orgId,
-      user_id: user?.id,
-      contact_id: selectedEmail.contact_id,
-      deal_id: selectedEmail.deal_id,
-      direction: "outbound",
-      subject: `Re: ${selectedEmail.subject || ""}`,
-      body_html: replyBody,
-      from_email: user?.email,
-      to_emails: [selectedEmail.from_email || ""],
-      status: "sent",
-      provider: "manual",
-      sent_at: new Date().toISOString(),
-      thread_id: selectedEmail.thread_id || selectedEmail.id,
-    } as any);
+    const { data, error } = await supabase.functions.invoke("gmail-send", {
+      body: {
+        org_id: orgId,
+        user_id: user?.id,
+        contact_id: selectedEmail.contact_id,
+        deal_id: selectedEmail.deal_id,
+        to: [selectedEmail.from_email || ""],
+        subject: `Re: ${selectedEmail.subject || ""}`,
+        html: replyBody,
+      },
+    });
+    if (error || (data as any)?.error) {
+      toast({ title: "Erro ao enviar", description: (data as any)?.error || error?.message, variant: "destructive" });
+      return;
+    }
     setReplyBody("");
     fetchData();
-    toast({ title: "Resposta enviada" });
+    toast({ title: "Resposta enviada pelo Gmail" });
+  };
+
+  const syncGmail = async () => {
+    if (!orgId) return;
+    setSyncing(true);
+    const { data, error } = await supabase.functions.invoke("gmail-sync", {
+      body: { org_id: orgId, max: 50 },
+    });
+    setSyncing(false);
+    if (error || (data as any)?.error) {
+      toast({ title: "Erro ao sincronizar", description: (data as any)?.error || error?.message, variant: "destructive" });
+      return;
+    }
+    await fetchData();
+    toast({ title: `Sincronizado: ${(data as any)?.synced ?? 0} novos emails` });
   };
 
   const batchArchive = async () => {

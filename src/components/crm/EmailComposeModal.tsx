@@ -136,27 +136,27 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
       return;
     }
     setSending(true);
-    const { error } = await supabase.from("emails").insert({
-      org_id: orgId,
-      user_id: user?.id,
-      contact_id: contactId !== "none" ? contactId : null,
-      deal_id: dealId !== "none" ? dealId : null,
-      direction: "outbound",
-      subject,
-      body_html: body,
-      from_email: user?.email || profile?.email,
-      to_emails: to.split(",").map((e) => e.trim()).filter(Boolean),
-      cc_emails: cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [],
-      bcc_emails: bcc ? bcc.split(",").map((e) => e.trim()).filter(Boolean) : [],
-      status: "sent",
-      provider: "manual",
-      sent_at: new Date().toISOString(),
-    } as any);
+    const { data, error } = await supabase.functions.invoke("gmail-send", {
+      body: {
+        org_id: orgId,
+        user_id: user?.id,
+        contact_id: contactId !== "none" ? contactId : null,
+        deal_id: dealId !== "none" ? dealId : null,
+        to: to.split(",").map((e) => e.trim()).filter(Boolean),
+        cc: cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [],
+        bcc: bcc ? bcc.split(",").map((e) => e.trim()).filter(Boolean) : [],
+        subject,
+        html: body,
+      },
+    });
     setSending(false);
-    if (error) { toast({ title: "Erro ao enviar", description: error.message, variant: "destructive" }); return; }
+    if (error || (data as any)?.error) {
+      toast({ title: "Erro ao enviar", description: (data as any)?.error || error?.message || "Falha", variant: "destructive" });
+      return;
+    }
     onOpenChange(false);
     onSent?.();
-    toast({ title: "Email enviado" });
+    toast({ title: "Email enviado pelo Gmail" });
   };
 
   // Auto-fill "to" when contact is selected

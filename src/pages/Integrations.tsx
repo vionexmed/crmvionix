@@ -130,6 +130,9 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const [slackChannels, setSlackChannels] = useState<{ id: string; name: string }[]>([]);
   const [slackWorkspace, setSlackWorkspace] = useState<string | null>(null);
   const [slackSetupGuide, setSlackSetupGuide] = useState(false);
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const [gmailSetupGuide, setGmailSetupGuide] = useState(false);
+  const [gmailAddress, setGmailAddress] = useState<string | null>(null);
 
   const handleSlackConnect = async () => {
     if (!orgId) return;
@@ -158,7 +161,39 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
     setSlackConnecting(false);
   };
 
+  const handleGmailConnect = async () => {
+    if (!orgId) return;
+    setGmailConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-connect", {
+        body: { org_id: orgId },
+      });
+      if (error) throw error;
+      if (data?.email) {
+        setGmailAddress(data.email);
+        toast({ title: `Gmail conectado: ${data.email}` });
+        fetchConfigs();
+      } else {
+        setGmailSetupGuide(true);
+      }
+    } catch {
+      setGmailSetupGuide(true);
+    }
+    setGmailConnecting(false);
+  };
+
   const integrations = [
+    {
+      provider: "gmail", name: "Gmail", icon: Mail,
+      description: "Enviar e receber emails de uma conta Gmail dedicada",
+      connectAction: handleGmailConnect,
+      connectLoading: gmailConnecting,
+      fields: [
+        { key: "from_name", label: "Nome de exibição", placeholder: "Equipe Comercial — VIONEX" },
+        { key: "signature", label: "Assinatura padrão", placeholder: "—\\nVIONEX", type: "textarea" as const },
+        { key: "notify_replies", label: "Notificar quando receber resposta", type: "switch" },
+      ],
+    },
     {
       provider: "slack", name: "Slack", icon: MessageSquare,
       description: "Notificações de negócios e resumo diário no canal",

@@ -111,16 +111,19 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
     if (provider === "gmail") {
-      const { client_id, client_secret, refresh_token } = editConfig || {};
-      if (!client_id || !client_secret || !refresh_token) {
-        toast({ title: "Preencha Client ID, Client Secret e Refresh Token", variant: "destructive" });
-        return;
-      }
       const { data, error } = await supabase.functions.invoke("gmail-connect", {
-        body: { org_id: orgId, config: editConfig },
+        body: {
+          org_id: orgId,
+          from_name: editConfig.from_name || null,
+          signature: editConfig.signature || null,
+        },
       });
       if (error || data?.error) {
-        toast({ title: "Falha ao validar Gmail", description: data?.message || error?.message || "Verifique as credenciais", variant: "destructive" });
+        toast({
+          title: "Falha ao conectar Gmail",
+          description: data?.message || error?.message || "Verifique a conexão Google no Lovable",
+          variant: "destructive",
+        });
         return;
       }
       toast({ title: `Gmail conectado: ${data.email}` });
@@ -178,17 +181,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
   const integrations = [
     {
-      provider: "gmail", name: "Gmail (OAuth2)", icon: Mail,
-      description: "Conta Gmail dedicada via Google API (Client ID + Refresh Token)",
+      provider: "gmail", name: "Gmail", icon: Mail,
+      description: "Envie e-mails da sua conta Google conectada (1 clique)",
       fields: [
-        { key: "client_id", label: "Client ID", placeholder: "xxxxx.apps.googleusercontent.com",
-          helpText: "Crie em:", helpUrl: "https://console.cloud.google.com/apis/credentials/oauthclient", helpLabel: "Google Cloud Console → Criar OAuth Client" },
-        { key: "client_secret", label: "Client Secret", placeholder: "GOCSPX-...",
-          helpText: "Mesmo local do Client ID:", helpUrl: "https://console.cloud.google.com/apis/credentials/oauthclient", helpLabel: "Google Cloud Console → Criar OAuth Client" },
-        { key: "refresh_token", label: "Refresh Token", placeholder: "1//0g...",
-          helpText: "Gere em:", helpUrl: "https://developers.google.com/oauthplayground/", helpLabel: "OAuth 2.0 Playground" },
-        { key: "from_name", label: "Nome de exibição", placeholder: "Equipe Comercial — VIONEX" },
-        { key: "signature", label: "Assinatura padrão", placeholder: "—\nVIONEX", type: "textarea" as const },
+        { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial — VIONEX" },
+        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nVIONEX", type: "textarea" as const },
       ],
     },
     {
@@ -272,10 +269,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           <div className="space-y-3">
             {editProvider === "gmail" && (
               <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
-                Antes de criar as credenciais, habilite a Gmail API:{" "}
-                <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
-                  Ativar Gmail API
-                </a>
+                Sua conta Google já está conectada via Lovable. É só clicar em <strong>Salvar</strong> para validar e ativar o envio de e-mails. Os campos abaixo são opcionais.
               </div>
             )}
             {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (

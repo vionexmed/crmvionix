@@ -5,6 +5,14 @@ import {
   Building2,
   Handshake,
   Activity,
+} from "lucide-react";
+import vionexLogo from "@/assets/vionex-logo.png";
+import {
+  // placeholder, real import below
+} from "react";
+// re-import the rest of the icons via separate statement to keep diff small
+import {
+  BarChart3,
   BarChart3,
   Settings,
   LogOut,

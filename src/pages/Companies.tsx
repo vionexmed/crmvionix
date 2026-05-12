@@ -170,8 +170,6 @@ export default function Companies() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
       <PageHeader
         icon={Building2Icon}
         kicker="Organizações"

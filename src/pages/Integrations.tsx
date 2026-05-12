@@ -279,8 +279,13 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                   <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="text-xs min-h-[80px]" />
                 ) : (
-                  <Input value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
-                    placeholder={field.placeholder} className="h-8 text-xs" />
+                  <Input
+                    type={["client_secret", "refresh_token"].includes(field.key) ? "password" : "text"}
+                    value={editConfig[field.key] || ""}
+                    onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
+                    placeholder={field.placeholder}
+                    className="h-8 text-xs"
+                  />
                 )}
               </div>
             ))}

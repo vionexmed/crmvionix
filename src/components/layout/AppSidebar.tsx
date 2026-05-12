@@ -107,10 +107,8 @@ export function AppSidebar() {
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
-              <img src={vionexLogo} alt="VIONEX" className="h-7 w-7 object-contain" />
-            </div>
-            {!collapsed && <span className="text-lg font-semibold tracking-tight">VIONEX</span>}
+            <img src={vionexLogo} alt="VIONEX" className="h-12 w-12 object-contain" />
+            {!collapsed && <span className="text-xl font-semibold tracking-tight">VIONEX</span>}
           </div>
         </SidebarHeader>
         <SidebarContent>

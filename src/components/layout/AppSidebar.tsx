@@ -3,16 +3,7 @@ import {
   LayoutDashboard,
   Users,
   Building2,
-  Handshake,
   Activity,
-} from "lucide-react";
-import vionexLogo from "@/assets/vionex-logo.png";
-import {
-  // placeholder, real import below
-} from "react";
-// re-import the rest of the icons via separate statement to keep diff small
-import {
-  BarChart3,
   BarChart3,
   Settings,
   LogOut,
@@ -24,7 +15,9 @@ import {
   Target,
   Plug,
   Shield,
+  Handshake,
 } from "lucide-react";
+import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";

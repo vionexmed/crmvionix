@@ -256,35 +256,40 @@ export default function Contacts() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Contatos</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">{filtered.length} contatos</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button onClick={() => setViewMode("table")} aria-label="Visualização tabela" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <List className="h-3.5 w-3.5" /><span className="hidden sm:inline">Tabela</span>
-            </button>
-            <button onClick={() => setViewMode("cards")} aria-label="Visualização cartões" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "cards" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <LayoutGrid className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cartões</span>
-            </button>
-            <button onClick={() => setViewMode("owner")} aria-label="Visualização por vendedor" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "owner" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <Users className="h-3.5 w-3.5" /><span className="hidden sm:inline">Vendedor</span>
-            </button>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
-            <Filter className="mr-1 h-3.5 w-3.5" /><span className="hidden sm:inline">Filtros</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV" className="hidden sm:flex">
-            <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV" className="hidden sm:flex">
-            <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
-          </Button>
-          <Button onClick={() => setCreateOpen(true)} aria-label="Criar novo contato">
-            <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo Contato</span><span className="sm:hidden">Novo</span>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={UsersIcon}
+        kicker="Diretório"
+        title="Contatos"
+        description={`${filtered.length} contatos cadastrados`}
+        pattern="dots"
+        actions={
+          <>
+            <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
+              <button onClick={() => setViewMode("table")} aria-label="Visualização tabela" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <List className="h-3.5 w-3.5" /><span className="hidden sm:inline">Tabela</span>
+              </button>
+              <button onClick={() => setViewMode("cards")} aria-label="Visualização cartões" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "cards" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <LayoutGrid className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cartões</span>
+              </button>
+              <button onClick={() => setViewMode("owner")} aria-label="Visualização por vendedor" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "owner" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <Users className="h-3.5 w-3.5" /><span className="hidden sm:inline">Vendedor</span>
+              </button>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
+              <Filter className="mr-1 h-3.5 w-3.5" /><span className="hidden sm:inline">Filtros</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV" className="hidden sm:flex">
+              <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV" className="hidden sm:flex">
+              <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} aria-label="Criar novo contato">
+              <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo Contato</span><span className="sm:hidden">Novo</span>
+            </Button>
+          </>
+        }
+      />
 
       {/* Search */}
       <div className="relative">

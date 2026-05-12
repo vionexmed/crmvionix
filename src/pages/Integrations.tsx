@@ -202,14 +202,14 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
   const integrations = [
     {
-      provider: "gmail", name: "Gmail", icon: Mail,
-      description: "Enviar e receber emails de uma conta Gmail dedicada",
-      connectAction: handleGmailConnect,
-      connectLoading: gmailConnecting,
+      provider: "gmail", name: "Gmail (OAuth2)", icon: Mail,
+      description: "Conta Gmail dedicada via Google API (Client ID + Refresh Token)",
       fields: [
+        { key: "client_id", label: "Client ID", placeholder: "xxxxx.apps.googleusercontent.com" },
+        { key: "client_secret", label: "Client Secret", placeholder: "GOCSPX-..." },
+        { key: "refresh_token", label: "Refresh Token", placeholder: "1//0g..." },
         { key: "from_name", label: "Nome de exibição", placeholder: "Equipe Comercial — VIONEX" },
-        { key: "signature", label: "Assinatura padrão", placeholder: "—\\nVIONEX", type: "textarea" as const },
-        { key: "notify_replies", label: "Notificar quando receber resposta", type: "switch" },
+        { key: "signature", label: "Assinatura padrão", placeholder: "—\nVIONEX", type: "textarea" as const },
       ],
     },
     {

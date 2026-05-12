@@ -150,16 +150,11 @@ export function AppSidebar() {
               )}
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Mídia Rede Social">
-                    <a
-                      href="https://lovable.dev/projects/12e5bbc0-83dc-4e3f-858b-ccf3546bfd88"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:bg-accent/50"
-                    >
+                  <SidebarMenuButton asChild isActive={isActive("/media-social")} tooltip="Mídia Rede Social">
+                    <NavLink to="/media-social" className="hover:bg-accent/50" activeClassName="bg-accent text-accent-foreground font-medium">
                       <Images className="h-4 w-4" />
                       {!collapsed && <span>Mídia Rede Social</span>}
-                    </a>
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

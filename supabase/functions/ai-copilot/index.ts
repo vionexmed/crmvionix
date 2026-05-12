@@ -13,7 +13,7 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const systemPrompt = `Você é o AI Copilot do FlowCRM, um assistente de vendas inteligente e proativo.
+    const systemPrompt = `Você é o AI Copilot do VIONEX, um assistente de vendas inteligente e proativo.
 
 REGRAS:
 - Responda sempre em português brasileiro

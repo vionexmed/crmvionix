@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Handshake, Mail, Lock, User } from "lucide-react";
+import { Mail, Lock, User } from "lucide-react";
+import vionexLogo from "@/assets/vionex-logo.png";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
@@ -99,10 +100,10 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <Handshake className="h-6 w-6 text-primary-foreground" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white">
+            <img src={vionexLogo} alt="VIONEX" className="h-14 w-14 object-contain" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">FlowCRM</h1>
+          <h1 className="text-2xl font-bold tracking-tight">VIONEX</h1>
           <p className="text-sm text-muted-foreground">Gerencie seus relacionamentos com inteligência</p>
         </div>
 

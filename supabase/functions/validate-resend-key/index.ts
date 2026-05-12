@@ -28,10 +28,10 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `${from_name || "FlowCRM"} <${from_email}>`,
+        from: `${from_name || "VIONEX"} <${from_email}>`,
         to: [test_to],
-        subject: "✓ FlowCRM conectado com sucesso!",
-        html: "<h2>✓ FlowCRM conectado!</h2><p>Seu FlowCRM está configurado para enviar emails. Pode fechar este email.</p>",
+        subject: "✓ VIONEX conectado com sucesso!",
+        html: "<h2>✓ VIONEX conectado!</h2><p>Seu VIONEX está configurado para enviar emails. Pode fechar este email.</p>",
       }),
     });
 
@@ -71,14 +71,14 @@ serve(async (req) => {
       const { data: existing } = await supabaseAdmin.from("integration_configs").select("id").eq("org_id", org_id).eq("provider", "resend").maybeSingle();
       if (existing) {
         await supabaseAdmin.from("integration_configs").update({
-          config: { from_email, from_name: from_name || "FlowCRM", configured: true },
+          config: { from_email, from_name: from_name || "VIONEX", configured: true },
           is_active: true,
         }).eq("id", existing.id);
       } else {
         await supabaseAdmin.from("integration_configs").insert({
           org_id,
           provider: "resend",
-          config: { from_email, from_name: from_name || "FlowCRM", configured: true },
+          config: { from_email, from_name: from_name || "VIONEX", configured: true },
           is_active: true,
         });
       }

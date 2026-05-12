@@ -19,7 +19,7 @@ export function WelcomeStep({ userName, onNext }: OnboardingStepProps) {
 
       <div className="space-y-2">
         <h2 className="text-2xl font-bold tracking-tight">
-          Bem-vindo ao FlowCRM, {firstName}! 👋
+          Bem-vindo ao VIONEX, {firstName}! 👋
         </h2>
         <p className="text-muted-foreground max-w-md mx-auto">
           Vamos configurar tudo em menos de 5 minutos.

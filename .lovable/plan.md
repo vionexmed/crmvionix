@@ -1,90 +1,56 @@
 
+# Rebrand para VIONEX
 
-## Revisão Completa do Fluxo de Onboarding (Remix-safe)
+Aplicar identidade visual da VIONEX (logo + paleta) em todo o sistema.
 
-Auditoria do fluxo atual identificou **6 pontos frágeis** que podem quebrar quando o projeto for remixado. Plano consolida todas as correções num único hardening.
+## Paleta oficial
 
-### Pontos frágeis identificados
+| Token | Hex | HSL | Uso |
+|---|---|---|---|
+| Navy Profundo | #0A1E3D | 217 72% 14% | Sidebar (tema claro), foreground escuro, dark bg |
+| Teal Institucional | #007B8A | 186 100% 27% | Primary (tema claro), botões, links, ring |
+| Teal Claro | #00A3B5 | 187 100% 35% | Primary (tema escuro), hover, accent secundário |
+| Branco | #FFFFFF | 0 0% 100% | Background claro, primary-foreground |
+| Grafite | #3A3F47 | 218 10% 25% | Texto secundário, muted-foreground |
 
-| # | Onde | Risco em remix |
-|---|---|---|
-| 1 | `handle_new_user()` | Se a primeira org já existir (caso comum em remix de DB clonado), novos usuários entram como `member` sem org própria — impede `create_organization_for_user` |
-| 2 | Trigger `on_auth_user_created` | Não está garantido no migration consolidado; remix sem trigger = profile órfão permanente |
-| 3 | `AuthContext.loadProfile` | 3 retries em 1.1s podem ser insuficientes se trigger demorar; sem refetch reativo |
-| 4 | `OnboardingModal` useEffect | `initializedRef` não reseta entre logins (logout + novo login no mesmo tab quebra) |
-| 5 | `CompanyStep` | Usa `.single()` (lança erro se org sumir); marca configurado só por `segment` mas não normaliza |
-| 6 | `Login.tsx` setTimeout 400ms | Race condition residual: navega antes do profile estar pronto se trigger demorar >400ms |
+## Mudanças
 
-### Plano de correção
+### 1. Logo e nome
+- Copiar `user-uploads://05_vionex.png` → `src/assets/vionex-logo.png`
+- Substituir o ícone `Handshake` + texto "FlowCRM" no `AppSidebar.tsx` pelo logo importado
+- Atualizar `index.html` (`<title>`, meta description, favicon → logo VIONEX)
+- Buscar referências textuais a "FlowCRM" no projeto (Login, Setup, OnboardingModal, README) e trocar por "VIONEX"
 
-#### 1. Migration: garantir trigger e função idempotentes
+### 2. Tokens de cor — `src/index.css`
+Tema claro (`:root`):
+- `--background`: branco puro `0 0% 100%`
+- `--foreground` / `--card-foreground`: navy `217 72% 14%`
+- `--primary`: teal institucional `186 100% 27%` / `--primary-foreground` `0 0% 100%`
+- `--ring`: teal institucional
+- `--muted-foreground`: grafite `218 10% 25%`
+- Sidebar: `--sidebar-background` navy `217 72% 14%`, foreground branco, primary teal claro, accent navy mais claro
 
-```sql
--- Recriar função handle_new_user com semântica forte para remix
-CREATE OR REPLACE FUNCTION public.handle_new_user() ...
--- Lógica: profile SEMPRE com onboarding_completed=false, onboarding_step=1
--- Org: sempre criar nova org para o primeiro usuário; demais entram como member na org existente
+Tema escuro (`.dark`):
+- `--background`: navy profundo `217 72% 14%`
+- `--card`: navy ligeiramente mais claro
+- `--primary`: teal claro `187 100% 35%`
+- Sidebar: navy mais escuro, primary teal claro
 
--- Recriar trigger idempotente
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+### 3. Accent color padrão — `src/contexts/ThemeContext.tsx`
+- Adicionar/substituir entrada `teal` em `ACCENT_COLORS` com:
+  - light: `186 100% 27%` (Teal Institucional)
+  - dark: `187 100% 35%` (Teal Claro)
+  - ring: `186 100% 27%`
+- Mudar default do `accentColor` de `"blue"` para `"teal"`
+- Atualizar lista de cores selecionáveis em Settings (manter outras como opção)
 
--- Backfill defensivo: qualquer auth.user sem profile recebe um agora
-INSERT INTO public.profiles (id, email, name, onboarding_completed, onboarding_step)
-SELECT u.id, u.email, COALESCE(u.raw_user_meta_data->>'full_name', split_part(u.email,'@',1)), false, 1
-FROM auth.users u
-LEFT JOIN public.profiles p ON p.id = u.id
-WHERE p.id IS NULL;
-```
+### 4. Favicon e manifesto
+- Gerar/copiar versão pequena do logo para `public/favicon.ico` (ou usar `.png`)
+- Atualizar `<link rel="icon">` em `index.html`
 
-#### 2. `src/contexts/AuthContext.tsx`
+## Não faz parte
+- Não alterar lógica de negócio, RLS, edge functions ou rotas
+- Não mexer em `client.ts`/`types.ts`
+- Memórias do projeto (Attio/Linear inspiração, Inter font, light default) permanecem
 
-- Aumentar retries para **5 tentativas** com backoff `[0, 200, 500, 1000, 1500]ms` (cobre triggers lentos pós-remix)
-- Adicionar `refreshProfile()` automático quando `loadProfile` retorna `null` após todos retries (último recurso: tentar reparar via insert direto se `auth.uid()` válido)
-- Resetar estado completamente em `signOut` (já existe) — adicionar reset do `loading` para `true` num novo `getSession`
-
-#### 3. `src/components/onboarding/OnboardingModal.tsx`
-
-- **Remover `initializedRef`**. Trocar por lógica idempotente baseada apenas em `profile.onboarding_completed`:
-  - Se `user && profile && !profile.onboarding_completed` → modal aberto
-  - Se `profile.onboarding_completed` → modal fechado
-  - Reage a mudanças de `profile` (novo login, refresh)
-- Carregar persistência (`loadPersistedOnboardingState`) apenas **uma vez por user.id** via ref que reseta quando user muda
-
-#### 4. `src/components/onboarding/CompanyStep.tsx`
-
-- Trocar `.single()` por `.maybeSingle()` (remix com org deletada não quebra a tela)
-- Manter regra: só marcar `alreadyConfigured` se `settings.segment` existir
-
-#### 5. `src/pages/Login.tsx`
-
-- Remover `setTimeout(400ms)` arbitrário. Em vez disso: após `signUp` bem-sucedido, **não navegar** — deixar o `useEffect([user])` existente fazer o redirect quando `user` for setado pelo `AuthContext` (que já tem retry resiliente)
-- Garantir que `useEffect` só navega se `user` existir (já está correto)
-
-#### 6. Verificação automática pós-remix
-
-Após aplicar, executar e validar:
-- Trigger `on_auth_user_created` existe em `auth.users` ✓
-- Função `handle_new_user` existe e tem `SECURITY DEFINER` ✓
-- Nenhum `auth.users` sem profile correspondente ✓
-- `felippe@fretebarato.com` (atualmente `onboarding_completed=false, step=1`) ao logar verá o modal automaticamente ✓
-
-### Resumo de alterações
-
-| Arquivo | Tipo |
-|---|---|
-| Migration SQL | Recriar `handle_new_user` + trigger + backfill |
-| `src/contexts/AuthContext.tsx` | 5 retries com backoff maior |
-| `src/components/onboarding/OnboardingModal.tsx` | Remover `initializedRef`, lógica reativa pura |
-| `src/components/onboarding/CompanyStep.tsx` | `.maybeSingle()` em vez de `.single()` |
-| `src/pages/Login.tsx` | Remover `setTimeout`, confiar no `useEffect([user])` |
-
-### Critério de validação
-
-1. **Remix do projeto** → primeiro usuário criado vê o modal no `/dashboard` automaticamente
-2. **Logout + signup novo no mesmo tab** → modal abre sem refresh
-3. **Usuário existente com `onboarding_completed=false`** → modal abre ao logar
-4. **Console limpo** — sem warnings `profile still null after retries`
-
+Posso prosseguir?

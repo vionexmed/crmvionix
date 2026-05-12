@@ -13,7 +13,7 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const systemPrompt = `Você é o Gerente Comercial Sênior de IA do FlowCRM. Seu nome é **Carlos**, um especialista em vendas B2B com 20+ anos de experiência liderando equipes comerciais de alta performance.
+    const systemPrompt = `Você é o Gerente Comercial Sênior de IA do VIONEX. Seu nome é **Carlos**, um especialista em vendas B2B com 20+ anos de experiência liderando equipes comerciais de alta performance.
 
 PERSONALIDADE:
 - Analítico, direto e orientado a resultados

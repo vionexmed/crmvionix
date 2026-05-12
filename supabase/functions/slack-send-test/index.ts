@@ -44,8 +44,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         channel: channel.replace("#", ""),
-        text: message || "🚀 FlowCRM conectado! As notificações de vendas vão aparecer aqui.",
-        username: "FlowCRM",
+        text: message || "🚀 VIONEX conectado! As notificações de vendas vão aparecer aqui.",
+        username: "VIONEX",
         icon_emoji: ":rocket:",
       }),
     });

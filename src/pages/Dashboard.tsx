@@ -355,7 +355,7 @@ export default function Dashboard() {
   if (!orgId) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <h2 className="mb-2 text-xl font-semibold">Bem-vindo ao FlowCRM!</h2>
+        <h2 className="mb-2 text-xl font-semibold">Bem-vindo ao VIONEX!</h2>
         <p className="text-muted-foreground">Vá em Configurações para criar sua organização.</p>
       </div>
     );

@@ -225,7 +225,9 @@ export default function Inbox() {
       {/* Left panel - email list */}
       <div className={`flex flex-col border-r border-border ${selectedEmail ? "w-[420px]" : "flex-1"} shrink-0`}>
         {/* Header */}
-        <div className="p-4 border-b border-border space-y-3">
+        <div className="relative p-4 border-b border-border space-y-3 overflow-hidden">
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-2/3 opacity-50 [mask-image:linear-gradient(to_left,black,transparent)]" style={{ backgroundImage: "radial-gradient(hsl(var(--primary) / 0.25) 1px, transparent 1.5px), radial-gradient(hsl(var(--foreground) / 0.10) 1px, transparent 1.5px)", backgroundSize: "24px 24px, 12px 12px", backgroundPosition: "0 0, 6px 6px" }} />
+          <div aria-hidden className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-primary via-primary/40 to-transparent" />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <InboxIcon className="h-5 w-5 text-primary" />

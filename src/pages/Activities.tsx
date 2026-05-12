@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Activity as ActivityIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
@@ -258,29 +260,28 @@ export default function Activities() {
 
   return (
     <div className="space-y-0">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Atividades</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} atividades
-            {counts.overdue > 0 && <span className="text-destructive font-medium ml-1">· {counts.overdue} atrasadas</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-            <button onClick={() => setViewMode("list")} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <List className="h-3.5 w-3.5" />
-            </button>
-            <button onClick={() => setViewMode("calendar")} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "calendar" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              <CalendarDays className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <Button onClick={() => setCreateOpen(true)} size="sm">
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Atividade
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        icon={ActivityIcon}
+        kicker="Interações"
+        title="Atividades"
+        description={`${filtered.length} atividades${counts.overdue > 0 ? ` · ${counts.overdue} atrasadas` : ""}`}
+        pattern="waves"
+        actions={
+          <>
+            <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
+              <button onClick={() => setViewMode("list")} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <List className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => setViewMode("calendar")} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "calendar" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                <CalendarDays className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <Button onClick={() => setCreateOpen(true)} size="sm">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />Atividade
+            </Button>
+          </>
+        }
+      />
 
       {/* Type filter tabs */}
       <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap">

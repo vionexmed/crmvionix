@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { BarChart3 as BarChart3Icon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -171,41 +173,43 @@ export default function Reports() {
 
   return (
     <div className="space-y-4">
-      {/* Header + Global Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
-          <p className="text-xs text-muted-foreground">Análises completas de vendas, atividades e previsão</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Select value={period} onValueChange={(v) => setPeriod(v as PeriodFilter)}>
-            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todo período</SelectItem>
-              <SelectItem value="this_month">Este mês</SelectItem>
-              <SelectItem value="last_month">Mês anterior</SelectItem>
-              <SelectItem value="this_quarter">Trimestre</SelectItem>
-              <SelectItem value="this_year">Este ano</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os donos</SelectItem>
-              {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          {pipelines.length > 1 && (
-            <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+      <PageHeader
+        icon={BarChart3Icon}
+        kicker="Análises"
+        title="Relatórios"
+        description="Análises completas de vendas, atividades e previsão"
+        pattern="diagonal"
+        actions={
+          <>
+            <Select value={period} onValueChange={(v) => setPeriod(v as PeriodFilter)}>
+              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos pipelines</SelectItem>
-                {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                <SelectItem value="all">Todo período</SelectItem>
+                <SelectItem value="this_month">Este mês</SelectItem>
+                <SelectItem value="last_month">Mês anterior</SelectItem>
+                <SelectItem value="this_quarter">Trimestre</SelectItem>
+                <SelectItem value="this_year">Este ano</SelectItem>
               </SelectContent>
             </Select>
-          )}
-        </div>
-      </div>
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os donos</SelectItem>
+                {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {pipelines.length > 1 && (
+              <Select value={pipelineFilter} onValueChange={setPipelineFilter}>
+                <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos pipelines</SelectItem>
+                  {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+          </>
+        }
+      />
 
       <Tabs defaultValue="sales" className="w-full">
         <TabsList className="grid w-full grid-cols-5">

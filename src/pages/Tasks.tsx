@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CheckSquare as CheckSquareIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
@@ -227,19 +229,18 @@ export default function Tasks() {
 
   return (
     <div className="space-y-0">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} tarefas
-            {counts.overdue > 0 && <span className="text-destructive font-medium ml-1">· {counts.overdue} vencidas</span>}
-          </p>
-        </div>
-        <Button onClick={openCreate} size="sm">
-          <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
-        </Button>
-      </div>
+      <PageHeader
+        icon={CheckSquareIcon}
+        kicker="Produtividade"
+        title="Tarefas"
+        description={`${filtered.length} tarefas${counts.overdue > 0 ? ` · ${counts.overdue} vencidas` : ""}`}
+        pattern="ticks"
+        actions={
+          <Button onClick={openCreate} size="sm">
+            <Plus className="mr-1.5 h-3.5 w-3.5" />Tarefa
+          </Button>
+        }
+      />
 
       {/* Owner filter + search bar */}
       <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap">

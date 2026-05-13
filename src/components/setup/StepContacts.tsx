@@ -87,7 +87,7 @@ export function StepContacts({ orgId, userId, onComplete, setStepData }: SetupSt
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact-phone">Telefone</Label>
-              <Input id="contact-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+55 11 99999-0000" />
+              <PhoneInput value={phone} onChange={(e164) => setPhone(e164)} />
             </div>
           </>
         )}

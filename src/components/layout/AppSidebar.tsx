@@ -17,6 +17,7 @@ import {
   Shield,
   Handshake,
   Megaphone,
+  Bookmark,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
@@ -145,12 +146,12 @@ export function AppSidebar() {
             <SidebarGroupContent>
               {!collapsed && (
                 <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mídia
+                  Mídia Digital
                 </p>
               )}
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Mídia Digital">
+                  <SidebarMenuButton asChild tooltip="Acessar Ferramentas">
                     <a
                       href="https://carousel-magic-spark-16.lovable.app"
                       target="_blank"
@@ -158,7 +159,20 @@ export function AppSidebar() {
                       className="hover:bg-accent/50"
                     >
                       <Megaphone className="h-4 w-4" />
-                      {!collapsed && <span>Mídia Digital</span>}
+                      {!collapsed && <span>Acessar Ferramentas</span>}
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Salvos">
+                    <a
+                      href="https://carousel-magic-spark-16.lovable.app/saved"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:bg-accent/50"
+                    >
+                      <Bookmark className="h-4 w-4" />
+                      {!collapsed && <span>Salvos</span>}
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -13,7 +13,7 @@ import {
   Reply, ReplyAll, Forward, ChevronLeft, Inbox as InboxIcon,
   Eye, MousePointerClick, RefreshCw, Trash2, AlertOctagon,
   FileText, SendHorizonal, Pencil, Printer, MoreVertical, Tag,
-  Paperclip, Download, Image as ImageIcon, Loader2,
+  Paperclip, Download, Image as ImageIcon, Loader2, Maximize2, Minimize2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
@@ -102,6 +102,7 @@ export default function Inbox() {
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<Folder>("inbox");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replyMode, setReplyMode] = useState<"reply" | "replyAll" | "forward" | null>(null);
   const [forwardTo, setForwardTo] = useState("");
@@ -470,10 +471,23 @@ export default function Inbox() {
 
       {/* ============== Detail ============== */}
       {selectedEmail && (
-        <div className="flex-1 min-w-0 flex flex-col">
+        <>
+          {expanded && (
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={() => setExpanded(false)}
+            />
+          )}
+          <div
+            className={cn(
+              expanded
+                ? "fixed inset-4 md:inset-10 z-50 bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+                : "flex-1 min-w-0 flex flex-col",
+            )}
+          >
           {/* Detail toolbar */}
           <div className="border-b border-border px-3 h-12 flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedEmail(null)}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedEmail(null); setExpanded(false); }}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div className="h-5 w-px bg-border mx-1" />
@@ -506,6 +520,9 @@ export default function Inbox() {
             </DropdownMenu>
             <Button variant="ghost" size="sm" onClick={() => updateEmail(selectedEmail.id, { is_read: false })} title="Marcar não lido"><Mail className="h-4 w-4" /></Button>
             <Button variant="ghost" size="sm" onClick={() => toggleImportance(selectedEmail)} title="Importância"><Tag className={cn("h-4 w-4", selectedEmail.importance === "high" && "text-amber-500")} /></Button>
+            <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)} title={expanded ? "Restaurar" : "Expandir"} className="ml-auto">
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm"><MoreVertical className="h-4 w-4" /></Button>
@@ -633,7 +650,8 @@ export default function Inbox() {
               )}
             </div>
           </ScrollArea>
-        </div>
+          </div>
+        </>
       )}
 
       <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} onSent={fetchData} />

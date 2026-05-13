@@ -95,6 +95,7 @@ const App = () => (
                 <Route path="/settings/integrations" element={<SuspenseRoute><Integrations /></SuspenseRoute>} />
                 <Route path="/settings/security" element={<SuspenseRoute><SecuritySettings /></SuspenseRoute>} />
                 <Route path="/team" element={<SuspenseRoute><Team /></SuspenseRoute>} />
+                <Route path="/marketing/*" element={<SuspenseRoute><Marketing /></SuspenseRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

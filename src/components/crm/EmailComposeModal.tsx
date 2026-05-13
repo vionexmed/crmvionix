@@ -395,3 +395,87 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
     </Dialog>
   );
 }
+
+interface AutocompleteProps {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: { email: string; name?: string }[];
+  placeholder?: string;
+}
+
+function EmailAutocompleteInput({ value, onChange, suggestions, placeholder }: AutocompleteProps) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Get last token after last comma
+  const tokens = value.split(",");
+  const current = tokens[tokens.length - 1].trim().toLowerCase();
+  const alreadyUsed = new Set(tokens.slice(0, -1).map((t) => t.trim().toLowerCase()).filter(Boolean));
+
+  const filtered = current.length > 0
+    ? suggestions
+        .filter((s) =>
+          !alreadyUsed.has(s.email.toLowerCase()) &&
+          (s.email.toLowerCase().includes(current) || (s.name || "").toLowerCase().includes(current))
+        )
+        .slice(0, 8)
+    : suggestions.filter((s) => !alreadyUsed.has(s.email.toLowerCase())).slice(0, 8);
+
+  useEffect(() => { setHighlight(0); }, [current]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const pick = (email: string) => {
+    const next = [...tokens.slice(0, -1).map((t) => t.trim()).filter(Boolean), email].join(", ") + ", ";
+    onChange(next);
+    setOpen(false);
+  };
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => (h + 1) % filtered.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => (h - 1 + filtered.length) % filtered.length); }
+    else if (e.key === "Enter" || e.key === "Tab") {
+      if (filtered[highlight]) { e.preventDefault(); pick(filtered[highlight].email); }
+    } else if (e.key === "Escape") { setOpen(false); }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKey}
+        placeholder={placeholder}
+        className="h-8 text-sm"
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
+          {filtered.map((s, i) => (
+            <button
+              key={s.email}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); pick(s.email); }}
+              onMouseEnter={() => setHighlight(i)}
+              className={`w-full text-left px-3 py-1.5 text-xs flex flex-col ${i === highlight ? "bg-accent" : ""}`}
+            >
+              {s.name && <span className="font-medium text-foreground">{s.name}</span>}
+              <span className={s.name ? "text-muted-foreground text-[11px]" : "text-foreground"}>{s.email}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

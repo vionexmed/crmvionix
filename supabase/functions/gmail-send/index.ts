@@ -114,10 +114,18 @@ serve(async (req) => {
     const fromEmail = tokenRow.email as string;
     const from = cfg.from_name ? `${cfg.from_name} <${fromEmail}>` : fromEmail;
 
+    // Fallback: per-user default signature stored in email_signatures
+    const { data: sigRow } = await supabaseAdmin
+      .from("email_signatures")
+      .select("html")
+      .eq("user_id", userId)
+      .eq("is_default", true)
+      .maybeSingle();
+    const fallbackSignatureHtml: string = sigRow?.html ?? "";
+
     const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;" }[c] as string));
     const buildSignatureHtml = (): string => {
       const hasStructured = cfg.signature_name || cfg.signature_role || cfg.signature_company || cfg.signature_phone || cfg.signature_email || cfg.signature_website || cfg.signature_logo_url || cfg.signature_extra;
-      if (!hasStructured && !cfg.signature) return "";
       if (hasStructured) {
         const rows: string[] = [];
         if (cfg.signature_name) rows.push(`<div style="font-weight:600;color:#111;font-size:14px">${escapeHtml(cfg.signature_name)}</div>`);
@@ -139,12 +147,16 @@ serve(async (req) => {
           : "";
         return `<br/><br/><table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;border-top:1px solid #e5e5e5;padding-top:10px;margin-top:10px"><tr>${logo}<td style="vertical-align:top">${rows.join("")}</td></tr></table>`;
       }
-      return `<br/><br/>${(cfg.signature as string).replace(/\n/g, "<br/>")}`;
+      if (cfg.signature) return `<br/><br/>${(cfg.signature as string).replace(/\n/g, "<br/>")}`;
+      if (fallbackSignatureHtml) return `<br/><br/>${fallbackSignatureHtml}`;
+      return "";
     };
 
     const signatureHtml = buildSignatureHtml();
-    const finalHtml = html ? `${html}${signatureHtml}` : html;
-    const finalText = !html && text && cfg.signature ? `${text}\n\n${cfg.signature}` : text;
+    const alreadyHasSignature = !!(html && signatureHtml && html.includes(signatureHtml.slice(0, 80)));
+    const finalHtml = html ? (alreadyHasSignature ? html : `${html}${signatureHtml}`) : (signatureHtml || undefined);
+    const plainSig = cfg.signature || (fallbackSignatureHtml ? fallbackSignatureHtml.replace(/<[^>]+>/g, "") : "");
+    const finalText = !html && text ? (plainSig ? `${text}\n\n${plainSig}` : text) : text;
 
     const toList = Array.isArray(to) ? to : String(to).split(",").map((s: string) => s.trim()).filter(Boolean);
     const ccList = cc ? (Array.isArray(cc) ? cc : String(cc).split(",").map((s: string) => s.trim()).filter(Boolean)) : [];

@@ -520,6 +520,9 @@ export default function Inbox() {
             </DropdownMenu>
             <Button variant="ghost" size="sm" onClick={() => updateEmail(selectedEmail.id, { is_read: false })} title="Marcar não lido"><Mail className="h-4 w-4" /></Button>
             <Button variant="ghost" size="sm" onClick={() => toggleImportance(selectedEmail)} title="Importância"><Tag className={cn("h-4 w-4", selectedEmail.importance === "high" && "text-amber-500")} /></Button>
+            <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)} title={expanded ? "Restaurar" : "Expandir"} className="ml-auto">
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm"><MoreVertical className="h-4 w-4" /></Button>

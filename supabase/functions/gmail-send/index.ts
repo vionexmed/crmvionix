@@ -147,25 +147,35 @@ serve(async (req) => {
     const buildSignatureHtml = (): string => {
       const hasStructured = cfg.signature_name || cfg.signature_role || cfg.signature_company || cfg.signature_phone || cfg.signature_email || cfg.signature_website || cfg.signature_logo_url || cfg.signature_extra;
       if (hasStructured) {
+        const accent = "#2563eb";
         const rows: string[] = [];
-        if (cfg.signature_name) rows.push(`<div style="font-weight:600;color:#111;font-size:14px">${escapeHtml(cfg.signature_name)}</div>`);
+        if (cfg.signature_name) rows.push(`<div style="font-family:Arial,Helvetica,sans-serif;font-weight:700;color:#0f172a;font-size:18px;line-height:1.25;letter-spacing:-0.01em">${escapeHtml(cfg.signature_name)}</div>`);
         if (cfg.signature_role || cfg.signature_company) {
-          const rc = [cfg.signature_role, cfg.signature_company].filter(Boolean).map(escapeHtml).join(" · ");
-          rows.push(`<div style="color:#444;font-size:12px">${rc}</div>`);
+          const role = cfg.signature_role ? `<span style="color:#475569">${escapeHtml(cfg.signature_role)}</span>` : "";
+          const sep = cfg.signature_role && cfg.signature_company ? `<span style="color:#cbd5e1;margin:0 6px">•</span>` : "";
+          const company = cfg.signature_company ? `<span style="color:${accent};font-weight:600">${escapeHtml(cfg.signature_company)}</span>` : "";
+          rows.push(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-top:2px">${role}${sep}${company}</div>`);
         }
-        const contactParts: string[] = [];
-        if (cfg.signature_phone) contactParts.push(`<a href="tel:${escapeHtml(String(cfg.signature_phone).replace(/[^+\d]/g,""))}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_phone)}</a>`);
-        if (cfg.signature_email) contactParts.push(`<a href="mailto:${escapeHtml(cfg.signature_email)}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_email)}</a>`);
+        const contactRows: string[] = [];
+        const iconStyle = "display:inline-block;width:14px;color:" + accent + ";font-weight:700;margin-right:8px;text-align:center";
+        if (cfg.signature_phone) contactRows.push(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#334155;margin-top:6px"><span style="${iconStyle}">✆</span><a href="tel:${escapeHtml(String(cfg.signature_phone).replace(/[^+\d]/g,""))}" style="color:#334155;text-decoration:none">${escapeHtml(cfg.signature_phone)}</a></div>`);
+        if (cfg.signature_email) contactRows.push(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#334155;margin-top:4px"><span style="${iconStyle}">✉</span><a href="mailto:${escapeHtml(cfg.signature_email)}" style="color:#334155;text-decoration:none">${escapeHtml(cfg.signature_email)}</a></div>`);
         if (cfg.signature_website) {
           const url = String(cfg.signature_website).startsWith("http") ? cfg.signature_website : `https://${cfg.signature_website}`;
-          contactParts.push(`<a href="${escapeHtml(url)}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_website)}</a>`);
+          const display = String(cfg.signature_website).replace(/^https?:\/\//, "");
+          contactRows.push(`<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#334155;margin-top:4px"><span style="${iconStyle}">🌐</span><a href="${escapeHtml(url)}" style="color:${accent};text-decoration:none;font-weight:500">${escapeHtml(display)}</a></div>`);
         }
-        if (contactParts.length) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${contactParts.join(" &nbsp;|&nbsp; ")}</div>`);
-        if (cfg.signature_extra) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${escapeHtml(cfg.signature_extra).replace(/\n/g,"<br/>")}</div>`);
+        if (contactRows.length) rows.push(`<div style="margin-top:10px">${contactRows.join("")}</div>`);
+        if (cfg.signature_extra) rows.push(`<div style="font-family:Arial,Helvetica,sans-serif;color:#64748b;font-size:12px;margin-top:10px;line-height:1.5">${escapeHtml(cfg.signature_extra).replace(/\n/g,"<br/>")}</div>`);
         const logo = cfg.signature_logo_url
-          ? `<td style="padding-right:14px;vertical-align:top"><img src="${escapeHtml(cfg.signature_logo_url)}" alt="" style="max-height:64px;max-width:140px;display:block"/></td>`
-          : "";
-        return `<br/><br/><table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;border-top:1px solid #e5e5e5;padding-top:10px;margin-top:10px"><tr>${logo}<td style="vertical-align:top">${rows.join("")}</td></tr></table>`;
+          ? `<td style="padding-right:18px;vertical-align:top;border-right:3px solid ${accent}"><img src="${escapeHtml(cfg.signature_logo_url)}" alt="" style="max-height:88px;max-width:170px;display:block"/></td><td style="width:18px"></td>`
+          : `<td style="padding-right:0;vertical-align:top;border-left:3px solid ${accent};padding-left:14px">`;
+        const open = cfg.signature_logo_url ? "" : "";
+        const wrapperOpen = cfg.signature_logo_url
+          ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>${logo}<td style="vertical-align:top">`
+          : `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>${logo}`;
+        const wrapperClose = `</td></tr></table>`;
+        return `<br/><br/><div style="border-top:1px solid #e2e8f0;padding-top:16px;margin-top:16px">${wrapperOpen}${rows.join("")}${wrapperClose}</div>`;
       }
       if (cfg.signature) return `<br/><br/>${(cfg.signature as string).replace(/\n/g, "<br/>")}`;
       if (fallbackSignatureHtml) return `<br/><br/>${fallbackSignatureHtml}`;

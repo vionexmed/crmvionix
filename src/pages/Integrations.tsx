@@ -324,7 +324,15 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                 Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais (nome e assinatura).
               </div>
             )}
-            {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (
+            {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => {
+              if (field.type === "section") {
+                return (
+                  <div key={field.key} className="pt-2 mt-2 border-t border-border">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{field.label}</p>
+                  </div>
+                );
+              }
+              return (
               <div key={field.key} className="space-y-1">
                 <Label className="text-xs">{field.label}</Label>
                 {field.type === "switch" ? (
@@ -335,6 +343,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                 ) : field.type === "textarea" ? (
                   <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="text-xs min-h-[80px]" />
+                ) : field.type === "logo" ? (
+                  <LogoUploadField
+                    value={editConfig[field.key] || ""}
+                    onChange={(url) => setEditConfig({ ...editConfig, [field.key]: url })}
+                  />
                 ) : field.type === "secret" || ["client_secret", "refresh_token", "client_id"].includes(field.key) ? (
                   <div className="relative">
                     <Input

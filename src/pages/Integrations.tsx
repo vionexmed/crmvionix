@@ -261,14 +261,35 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                         {cfg.is_active ? "Conectado" : "Inativo"}
                       </Badge>
                       <Button variant="outline" size="sm" className="ml-auto h-7 text-[10px]"
-                        onClick={() => { setEditProvider(intg.provider); setEditConfig(cfg.config || {}); }}>
+                        onClick={async () => {
+                          setEditProvider(intg.provider);
+                          let base = cfg.config || {};
+                          if (intg.provider === "gmail" && (!base.client_id || !base.client_secret)) {
+                            try {
+                              const { data } = await supabase.functions.invoke("gmail-get-defaults");
+                              if (data) base = { client_id: base.client_id || data.client_id, client_secret: base.client_secret || data.client_secret, ...base };
+                            } catch { /* ignore */ }
+                          }
+                          setEditConfig(base);
+                        }}>
                         Configurar
                       </Button>
                     </>
                   ) : (
                     <Button size="sm" className="h-7 text-[10px]"
                       disabled={intg.connectLoading}
-                      onClick={() => intg.connectAction ? intg.connectAction() : (() => { setEditProvider(intg.provider); setEditConfig({}); })()}>
+                      onClick={async () => {
+                        if (intg.connectAction) return intg.connectAction();
+                        setEditProvider(intg.provider);
+                        let base: any = {};
+                        if (intg.provider === "gmail") {
+                          try {
+                            const { data } = await supabase.functions.invoke("gmail-get-defaults");
+                            if (data) base = { client_id: data.client_id, client_secret: data.client_secret };
+                          } catch { /* ignore */ }
+                        }
+                        setEditConfig(base);
+                      }}>
                       {intg.connectLoading ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Conectando...</> : <><Plus className="mr-1 h-3 w-3" />Conectar</>}
                     </Button>
                   )}

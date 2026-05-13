@@ -53,6 +53,7 @@ type Email = {
   sent_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  attachments?: Array<{ filename: string; mime_type: string; size: number; attachment_id: string }>;
 };
 
 type Contact = {

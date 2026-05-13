@@ -192,9 +192,20 @@ serve(async (req) => {
       text: finalText,
     });
 
-    const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    const sendUrl = useConnector
+      ? "https://connector-gateway.lovable.dev/google_mail/gmail/v1/users/me/messages/send"
+      : "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+    const sendHeaders: Record<string, string> = useConnector
+      ? {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "X-Connection-Api-Key": connectorApiKey,
+          "Content-Type": "application/json",
+        }
+      : { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+    const sendRes = await fetch(sendUrl, {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      headers: sendHeaders,
       body: JSON.stringify({ raw }),
     });
     const sendData = await sendRes.json();

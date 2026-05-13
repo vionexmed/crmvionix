@@ -106,8 +106,7 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
       phone: phone || null,
       status: "lead",
       owner_id: user?.id,
-      // @ts-expect-error metadata column added via migration; types will regenerate
-      metadata: finalMeta,
+      metadata: finalMeta as never,
     });
     setSaving(false);
     if (error) {

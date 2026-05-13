@@ -471,10 +471,23 @@ export default function Inbox() {
 
       {/* ============== Detail ============== */}
       {selectedEmail && (
-        <div className="flex-1 min-w-0 flex flex-col">
+        <>
+          {expanded && (
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={() => setExpanded(false)}
+            />
+          )}
+          <div
+            className={cn(
+              expanded
+                ? "fixed inset-4 md:inset-10 z-50 bg-background border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+                : "flex-1 min-w-0 flex flex-col",
+            )}
+          >
           {/* Detail toolbar */}
           <div className="border-b border-border px-3 h-12 flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedEmail(null)}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedEmail(null); setExpanded(false); }}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div className="h-5 w-px bg-border mx-1" />

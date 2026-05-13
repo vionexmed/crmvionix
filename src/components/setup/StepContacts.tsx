@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Loader2, UserPlus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PhoneInput } from "@/components/ui/phone-input";
 import type { SetupStepProps } from "@/pages/Setup";
 
 export function StepContacts({ orgId, userId, onComplete, setStepData }: SetupStepProps) {

@@ -102,6 +102,7 @@ export default function Inbox() {
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<Folder>("inbox");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replyMode, setReplyMode] = useState<"reply" | "replyAll" | "forward" | null>(null);
   const [forwardTo, setForwardTo] = useState("");

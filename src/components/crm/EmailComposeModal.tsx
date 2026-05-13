@@ -248,18 +248,18 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
                 </button>
               )}
             </div>
-            <Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="email@exemplo.com" className="h-8 text-sm" />
+            <EmailAutocompleteInput value={to} onChange={setTo} suggestions={knownEmails} placeholder="email@exemplo.com" />
           </div>
 
           {showCcBcc && (
             <>
               <div className="space-y-1">
                 <Label className="text-xs">Cc</Label>
-                <Input value={cc} onChange={(e) => setCc(e.target.value)} className="h-8 text-sm" />
+                <EmailAutocompleteInput value={cc} onChange={setCc} suggestions={knownEmails} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Bcc</Label>
-                <Input value={bcc} onChange={(e) => setBcc(e.target.value)} className="h-8 text-sm" />
+                <EmailAutocompleteInput value={bcc} onChange={setBcc} suggestions={knownEmails} />
               </div>
             </>
           )}

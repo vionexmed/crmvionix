@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
@@ -62,6 +62,10 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiSubjects, setAiSubjects] = useState<string[]>([]);
+  const [knownEmails, setKnownEmails] = useState<{ email: string; name?: string }[]>([]);
+  const [toFocusField, setToFocusField] = useState<"to" | "cc" | "bcc" | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   useEffect(() => {
     if (!open || !orgId) return;
     setTo(defaultTo || ""); setSubject(""); setBody(""); setCc(""); setBcc("");
@@ -70,12 +74,35 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
       supabase.from("contacts").select("id,first_name,last_name,email,org_id").eq("org_id", orgId),
       supabase.from("deals").select("id,title,org_id,contact_id").eq("org_id", orgId),
       supabase.from("email_templates").select("*").eq("org_id", orgId),
-    ]).then(([c, d, t]) => {
+      supabase.from("emails").select("from_email,to_emails,cc_emails,bcc_emails").eq("org_id", orgId).order("created_at", { ascending: false }).limit(500),
+    ]).then(([c, d, t, e]) => {
       const contactsList = (c.data as Contact[]) || [];
       const dealsList = (d.data as Deal[]) || [];
       setContacts(contactsList);
       setDeals(dealsList);
       setTemplates((t.data as Template[]) || []);
+      // Build known emails dictionary from contacts + history
+      const dict = new Map<string, { email: string; name?: string }>();
+      contactsList.forEach((ct) => {
+        if (ct.email) {
+          const k = ct.email.toLowerCase();
+          dict.set(k, { email: ct.email, name: `${ct.first_name} ${ct.last_name || ""}`.trim() });
+        }
+      });
+      const pushEmail = (raw: any) => {
+        if (!raw) return;
+        const str = typeof raw === "string" ? raw : raw?.email || "";
+        if (!str || !str.includes("@")) return;
+        const k = str.toLowerCase();
+        if (!dict.has(k)) dict.set(k, { email: str });
+      };
+      ((e.data as any[]) || []).forEach((row) => {
+        pushEmail(row.from_email);
+        (row.to_emails || []).forEach(pushEmail);
+        (row.cc_emails || []).forEach(pushEmail);
+        (row.bcc_emails || []).forEach(pushEmail);
+      });
+      setKnownEmails(Array.from(dict.values()));
       // Auto-fill "to" from defaultContactId
       if (!defaultTo && defaultContactId && defaultContactId !== "none") {
         const contact = contactsList.find((ct) => ct.id === defaultContactId);
@@ -221,18 +248,18 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
                 </button>
               )}
             </div>
-            <Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="email@exemplo.com" className="h-8 text-sm" />
+            <EmailAutocompleteInput value={to} onChange={setTo} suggestions={knownEmails} placeholder="email@exemplo.com" />
           </div>
 
           {showCcBcc && (
             <>
               <div className="space-y-1">
                 <Label className="text-xs">Cc</Label>
-                <Input value={cc} onChange={(e) => setCc(e.target.value)} className="h-8 text-sm" />
+                <EmailAutocompleteInput value={cc} onChange={setCc} suggestions={knownEmails} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Bcc</Label>
-                <Input value={bcc} onChange={(e) => setBcc(e.target.value)} className="h-8 text-sm" />
+                <EmailAutocompleteInput value={bcc} onChange={setBcc} suggestions={knownEmails} />
               </div>
             </>
           )}
@@ -366,5 +393,89 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface AutocompleteProps {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: { email: string; name?: string }[];
+  placeholder?: string;
+}
+
+function EmailAutocompleteInput({ value, onChange, suggestions, placeholder }: AutocompleteProps) {
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Get last token after last comma
+  const tokens = value.split(",");
+  const current = tokens[tokens.length - 1].trim().toLowerCase();
+  const alreadyUsed = new Set(tokens.slice(0, -1).map((t) => t.trim().toLowerCase()).filter(Boolean));
+
+  const filtered = current.length > 0
+    ? suggestions
+        .filter((s) =>
+          !alreadyUsed.has(s.email.toLowerCase()) &&
+          (s.email.toLowerCase().includes(current) || (s.name || "").toLowerCase().includes(current))
+        )
+        .slice(0, 8)
+    : suggestions.filter((s) => !alreadyUsed.has(s.email.toLowerCase())).slice(0, 8);
+
+  useEffect(() => { setHighlight(0); }, [current]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const pick = (email: string) => {
+    const next = [...tokens.slice(0, -1).map((t) => t.trim()).filter(Boolean), email].join(", ") + ", ";
+    onChange(next);
+    setOpen(false);
+  };
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => (h + 1) % filtered.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => (h - 1 + filtered.length) % filtered.length); }
+    else if (e.key === "Enter" || e.key === "Tab") {
+      if (filtered[highlight]) { e.preventDefault(); pick(filtered[highlight].email); }
+    } else if (e.key === "Escape") { setOpen(false); }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKey}
+        placeholder={placeholder}
+        className="h-8 text-sm"
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
+          {filtered.map((s, i) => (
+            <button
+              key={s.email}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); pick(s.email); }}
+              onMouseEnter={() => setHighlight(i)}
+              className={`w-full text-left px-3 py-1.5 text-xs flex flex-col ${i === highlight ? "bg-accent" : ""}`}
+            >
+              {s.name && <span className="font-medium text-foreground">{s.name}</span>}
+              <span className={s.name ? "text-muted-foreground text-[11px]" : "text-foreground"}>{s.email}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -123,16 +123,17 @@ serve(async (req) => {
       .eq("provider", "gmail")
       .maybeSingle();
 
-    const cfg = { email, mode: "oauth_byok" };
+    // Preserve user-provided client_id/client_secret + other fields
+    const mergedCfg = { ...cfg, email, mode: "oauth_byok" };
     if (existing) {
       await supabaseAdmin.from("integration_configs")
-        .update({ config: cfg, is_active: true, connected_at: new Date().toISOString() })
+        .update({ config: mergedCfg, is_active: true, connected_at: new Date().toISOString() })
         .eq("id", existing.id);
     } else {
       await supabaseAdmin.from("integration_configs").insert({
         org_id: state.org_id,
         provider: "gmail",
-        config: cfg,
+        config: mergedCfg,
         is_active: true,
         connected_at: new Date().toISOString(),
         connected_by: state.user_id,

@@ -49,8 +49,21 @@ serve(async (req) => {
   }
 
   try {
-    const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Prefer per-org credentials, fallback to env secrets
+    const { data: cfgRow } = await supabaseAdmin
+      .from("integration_configs")
+      .select("config")
+      .eq("org_id", state.org_id)
+      .eq("provider", "gmail")
+      .maybeSingle();
+    const cfg: any = cfgRow?.config ?? {};
+    const clientId = cfg.client_id || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    const clientSecret = cfg.client_secret || Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) return htmlResponse("Credenciais OAuth não configuradas.", false, finalReturn);
 
     const redirectUri = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/gmail-oauth-callback`;
@@ -82,10 +95,7 @@ serve(async (req) => {
 
     const expiresAt = new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString();
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // supabaseAdmin already created above
 
     const { error: upErr } = await supabaseAdmin
       .from("gmail_oauth_tokens")
@@ -113,16 +123,17 @@ serve(async (req) => {
       .eq("provider", "gmail")
       .maybeSingle();
 
-    const cfg = { email, mode: "oauth_byok" };
+    // Preserve user-provided client_id/client_secret + other fields
+    const mergedCfg = { ...cfg, email, mode: "oauth_byok" };
     if (existing) {
       await supabaseAdmin.from("integration_configs")
-        .update({ config: cfg, is_active: true, connected_at: new Date().toISOString() })
+        .update({ config: mergedCfg, is_active: true, connected_at: new Date().toISOString() })
         .eq("id", existing.id);
     } else {
       await supabaseAdmin.from("integration_configs").insert({
         org_id: state.org_id,
         provider: "gmail",
-        config: cfg,
+        config: mergedCfg,
         is_active: true,
         connected_at: new Date().toISOString(),
         connected_by: state.user_id,

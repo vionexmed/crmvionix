@@ -48,10 +48,22 @@ serve(async (req) => {
       });
     }
 
-    const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    // Prefer per-org credentials saved in integration_configs, fallback to env secret
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: cfgRow } = await supabaseAdmin
+      .from("integration_configs")
+      .select("config")
+      .eq("org_id", org_id)
+      .eq("provider", "gmail")
+      .maybeSingle();
+    const cfg: any = cfgRow?.config ?? {};
+    const clientId = cfg.client_id || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
     if (!clientId) {
-      return new Response(JSON.stringify({ error: "GOOGLE_OAUTH_CLIENT_ID not configured" }), {
-        status: 500,
+      return new Response(JSON.stringify({ error: "Google OAuth Client ID não configurado. Adicione em Integrações > Gmail." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

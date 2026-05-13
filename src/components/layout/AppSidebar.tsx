@@ -146,6 +146,7 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
           {renderNavGroup(emailItems, "Email")}
+          {renderNavGroup(marketingItems, "Marketing")}
           {renderNavGroup(analyticsItems, "Analytics")}
           {renderNavGroup(adminItems, "Admin")}
         </SidebarContent>

@@ -21,11 +21,13 @@ import {
 } from "@/components/ui/table";
 import {
   Plus, Trash2, GripVertical, UserPlus, Shield, Moon, Sun, Monitor,
-  Bell, CreditCard, Crown, Users, Palette, X,
+  Bell, CreditCard, Crown, Users, Palette, X, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { Database } from "@/integrations/supabase/types";
+import { Textarea } from "@/components/ui/textarea";
+import { LogoUploadField } from "@/components/crm/LogoUploadField";
 
 type PipelineStage = Database["public"]["Tables"]["pipeline_stages"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];

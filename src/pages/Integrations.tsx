@@ -97,6 +97,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const [configs, setConfigs] = useState<IntegrationConfig[]>([]);
   const [editProvider, setEditProvider] = useState<string | null>(null);
   const [editConfig, setEditConfig] = useState<any>({});
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
   const fetchConfigs = useCallback(async () => {
     if (!orgId) return;

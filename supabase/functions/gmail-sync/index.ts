@@ -30,6 +30,12 @@ function extractBody(payload: any): { html: string; text: string } {
   const walk = (part: any) => {
     if (!part) return;
     const mt = part.mimeType || "";
+    const filename = part.filename || "";
+    // Skip attachments from body extraction
+    if (filename) {
+      if (Array.isArray(part.parts)) part.parts.forEach(walk);
+      return;
+    }
     if (part.body?.data) {
       const decoded = decodeBase64Url(part.body.data);
       if (mt === "text/html" && !html) html = decoded;
@@ -39,6 +45,26 @@ function extractBody(payload: any): { html: string; text: string } {
   };
   walk(payload);
   return { html, text };
+}
+
+function extractAttachments(payload: any): Array<{ filename: string; mime_type: string; size: number; attachment_id: string; part_id?: string }> {
+  const out: Array<any> = [];
+  const walk = (part: any) => {
+    if (!part) return;
+    const filename = part.filename || "";
+    if (filename && part.body?.attachmentId) {
+      out.push({
+        filename,
+        mime_type: part.mimeType || "application/octet-stream",
+        size: Number(part.body.size || 0),
+        attachment_id: part.body.attachmentId,
+        part_id: part.partId,
+      });
+    }
+    if (Array.isArray(part.parts)) part.parts.forEach(walk);
+  };
+  walk(payload);
+  return out;
 }
 
 function parseAddrList(s: string | null): string[] {
@@ -140,6 +166,7 @@ serve(async (req) => {
         const dateHeader = getHeader(headers, "Date");
         const sentAt = dateHeader ? new Date(dateHeader).toISOString() : new Date(Number(msg.internalDate)).toISOString();
         const { html, text } = extractBody(msg.payload);
+        const attachments = extractAttachments(msg.payload);
         const isUnread = (msg.labelIds ?? []).includes("UNREAD");
 
         // Try to match contact by from_email
@@ -169,6 +196,7 @@ serve(async (req) => {
           thread_id: msg.threadId ?? null,
           is_read: !isUnread,
           sent_at: sentAt,
+          attachments,
         });
         synced++;
       } catch (e) {

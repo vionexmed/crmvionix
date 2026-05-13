@@ -103,7 +103,7 @@ serve(async (req) => {
       }).eq("id", tokenRow.id);
     }
 
-    // Optional from_name/signature from integration_configs
+    // Optional from_name + structured signature from integration_configs
     const { data: cfgRow } = await supabaseAdmin
       .from("integration_configs")
       .select("config")
@@ -113,7 +113,37 @@ serve(async (req) => {
     const cfg: any = cfgRow?.config ?? {};
     const fromEmail = tokenRow.email as string;
     const from = cfg.from_name ? `${cfg.from_name} <${fromEmail}>` : fromEmail;
-    const finalHtml = html && cfg.signature ? `${html}<br/><br/>${(cfg.signature as string).replace(/\n/g, "<br/>")}` : html;
+
+    const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;" }[c] as string));
+    const buildSignatureHtml = (): string => {
+      const hasStructured = cfg.signature_name || cfg.signature_role || cfg.signature_company || cfg.signature_phone || cfg.signature_email || cfg.signature_website || cfg.signature_logo_url || cfg.signature_extra;
+      if (!hasStructured && !cfg.signature) return "";
+      if (hasStructured) {
+        const rows: string[] = [];
+        if (cfg.signature_name) rows.push(`<div style="font-weight:600;color:#111;font-size:14px">${escapeHtml(cfg.signature_name)}</div>`);
+        if (cfg.signature_role || cfg.signature_company) {
+          const rc = [cfg.signature_role, cfg.signature_company].filter(Boolean).map(escapeHtml).join(" · ");
+          rows.push(`<div style="color:#444;font-size:12px">${rc}</div>`);
+        }
+        const contactParts: string[] = [];
+        if (cfg.signature_phone) contactParts.push(`<a href="tel:${escapeHtml(String(cfg.signature_phone).replace(/[^+\d]/g,""))}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_phone)}</a>`);
+        if (cfg.signature_email) contactParts.push(`<a href="mailto:${escapeHtml(cfg.signature_email)}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_email)}</a>`);
+        if (cfg.signature_website) {
+          const url = String(cfg.signature_website).startsWith("http") ? cfg.signature_website : `https://${cfg.signature_website}`;
+          contactParts.push(`<a href="${escapeHtml(url)}" style="color:#444;text-decoration:none">${escapeHtml(cfg.signature_website)}</a>`);
+        }
+        if (contactParts.length) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${contactParts.join(" &nbsp;|&nbsp; ")}</div>`);
+        if (cfg.signature_extra) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${escapeHtml(cfg.signature_extra).replace(/\n/g,"<br/>")}</div>`);
+        const logo = cfg.signature_logo_url
+          ? `<td style="padding-right:14px;vertical-align:top"><img src="${escapeHtml(cfg.signature_logo_url)}" alt="" style="max-height:64px;max-width:140px;display:block"/></td>`
+          : "";
+        return `<br/><br/><table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;border-top:1px solid #e5e5e5;padding-top:10px;margin-top:10px"><tr>${logo}<td style="vertical-align:top">${rows.join("")}</td></tr></table>`;
+      }
+      return `<br/><br/>${(cfg.signature as string).replace(/\n/g, "<br/>")}`;
+    };
+
+    const signatureHtml = buildSignatureHtml();
+    const finalHtml = html ? `${html}${signatureHtml}` : html;
     const finalText = !html && text && cfg.signature ? `${text}\n\n${cfg.signature}` : text;
 
     const toList = Array.isArray(to) ? to : String(to).split(",").map((s: string) => s.trim()).filter(Boolean);

@@ -901,6 +901,7 @@ export type Database = {
       }
       emails: {
         Row: {
+          attachments: Json
           bcc_emails: Json | null
           body_html: string | null
           cc_emails: Json | null
@@ -934,6 +935,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          attachments?: Json
           bcc_emails?: Json | null
           body_html?: string | null
           cc_emails?: Json | null
@@ -967,6 +969,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          attachments?: Json
           bcc_emails?: Json | null
           body_html?: string | null
           cc_emails?: Json | null

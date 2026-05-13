@@ -25,6 +25,7 @@ import {
   Check, ExternalLink, RefreshCw, Eye, EyeOff, Loader2, Globe, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { LogoUploadField } from "@/components/crm/LogoUploadField";
 
 // ── Types ──
 type IntegrationConfig = {
@@ -112,9 +113,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
     if (provider === "gmail") {
-      // Just save optional from_name/signature; OAuth is handled by Conectar button
+      // Save optional credentials, display name and signature fields; OAuth handled by Conectar
       const existing = getConfig("gmail");
-      const merged = { ...(existing?.config || {}), from_name: editConfig.from_name || null, signature: editConfig.signature || null };
+      const sigKeys = ["client_id","client_secret","from_name","signature","signature_name","signature_role","signature_company","signature_phone","signature_email","signature_website","signature_extra","signature_logo_url"];
+      const merged: any = { ...(existing?.config || {}) };
+      for (const k of sigKeys) merged[k] = editConfig[k] ?? merged[k] ?? null;
       if (existing) {
         await supabase.from("integration_configs").update({ config: merged } as any).eq("id", existing.id);
       } else {
@@ -206,7 +209,15 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           helpLabel: "Google Cloud Console" },
         { key: "client_secret", label: "Google OAuth Client Secret", placeholder: "GOCSPX-...", type: "secret" as const },
         { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial" },
-        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nMinha Empresa", type: "textarea" as const },
+        { key: "_signature_section", label: "Assinatura de email", type: "section" as const },
+        { key: "signature_logo_url", label: "Logo da assinatura", type: "logo" as const },
+        { key: "signature_name", label: "Nome", placeholder: "João Silva" },
+        { key: "signature_role", label: "Cargo", placeholder: "Diretor Comercial" },
+        { key: "signature_company", label: "Empresa", placeholder: "Minha Empresa Ltda" },
+        { key: "signature_phone", label: "Telefone", placeholder: "+55 11 99999-9999" },
+        { key: "signature_email", label: "E-mail", placeholder: "joao@empresa.com" },
+        { key: "signature_website", label: "Website", placeholder: "https://empresa.com" },
+        { key: "signature_extra", label: "Texto adicional (opcional)", placeholder: "Endereço, redes sociais, etc.", type: "textarea" as const },
       ],
     },
     {
@@ -311,10 +322,18 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           <div className="space-y-3">
             {editProvider === "gmail" && (
               <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
-                Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais (nome e assinatura).
+                Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais — preencha sua assinatura com logo e dados de contato para aparecer em todos os emails enviados.
               </div>
             )}
-            {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (
+            {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => {
+              if (field.type === "section") {
+                return (
+                  <div key={field.key} className="pt-2 mt-2 border-t border-border">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{field.label}</p>
+                  </div>
+                );
+              }
+              return (
               <div key={field.key} className="space-y-1">
                 <Label className="text-xs">{field.label}</Label>
                 {field.type === "switch" ? (
@@ -325,6 +344,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                 ) : field.type === "textarea" ? (
                   <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="text-xs min-h-[80px]" />
+                ) : field.type === "logo" ? (
+                  <LogoUploadField
+                    value={editConfig[field.key] || ""}
+                    onChange={(url) => setEditConfig({ ...editConfig, [field.key]: url })}
+                  />
                 ) : field.type === "secret" || ["client_secret", "refresh_token", "client_id"].includes(field.key) ? (
                   <div className="relative">
                     <Input
@@ -362,7 +386,8 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                   </p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditProvider(null)}>Cancelar</Button>

@@ -172,13 +172,35 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
     setSlackConnecting(false);
   };
 
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const handleGmailConnect = async () => {
+    if (!orgId) return;
+    setGmailConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-oauth-start", {
+        body: { org_id: orgId, return_to: `${window.location.origin}/settings/integrations` },
+      });
+      if (error || !data?.url) {
+        toast({ title: "Falha ao iniciar OAuth", description: data?.error || error?.message || "Erro desconhecido", variant: "destructive" });
+        setGmailConnecting(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      setGmailConnecting(false);
+    }
+  };
+
   const integrations = [
     {
       provider: "gmail", name: "Gmail", icon: Mail,
-      description: "Envie e-mails da sua conta Google conectada (1 clique)",
+      description: "Conecte sua conta Google via OAuth (suas credenciais)",
+      connectAction: handleGmailConnect,
+      connectLoading: gmailConnecting,
       fields: [
-        { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial — VIONEX" },
-        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nVIONEX", type: "textarea" as const },
+        { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial" },
+        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nMinha Empresa", type: "textarea" as const },
       ],
     },
     {

@@ -33,6 +33,7 @@ const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const SalesGoals = lazy(() => import("./pages/SalesGoals"));
 const Team = lazy(() => import("./pages/Team"));
 const Setup = lazy(() => import("./pages/Setup"));
+const Marketing = lazy(() => import("./pages/Marketing"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +95,7 @@ const App = () => (
                 <Route path="/settings/integrations" element={<SuspenseRoute><Integrations /></SuspenseRoute>} />
                 <Route path="/settings/security" element={<SuspenseRoute><SecuritySettings /></SuspenseRoute>} />
                 <Route path="/team" element={<SuspenseRoute><Team /></SuspenseRoute>} />
+                <Route path="/marketing/*" element={<SuspenseRoute><Marketing /></SuspenseRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

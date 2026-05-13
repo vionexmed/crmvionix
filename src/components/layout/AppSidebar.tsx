@@ -16,6 +16,7 @@ import {
   Plug,
   Shield,
   Handshake,
+  Megaphone,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
@@ -50,6 +51,12 @@ const emailItems = [
   { title: "Caixa de Entrada", url: "/inbox", icon: Inbox },
   { title: "Templates", url: "/email-templates", icon: FileText },
   { title: "Sequências", url: "/email-sequences", icon: Zap },
+];
+
+const marketingItems = [
+  { title: "Visão Geral", url: "/marketing", icon: Megaphone },
+  { title: "Campanhas", url: "/marketing/campaigns", icon: Target },
+  { title: "Insights", url: "/marketing/insights", icon: BarChart3 },
 ];
 
 const analyticsItems = [
@@ -139,6 +146,7 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
           {renderNavGroup(emailItems, "Email")}
+          {renderNavGroup(marketingItems, "Marketing")}
           {renderNavGroup(analyticsItems, "Analytics")}
           {renderNavGroup(adminItems, "Admin")}
         </SidebarContent>

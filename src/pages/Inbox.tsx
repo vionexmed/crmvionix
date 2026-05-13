@@ -641,3 +641,150 @@ export default function Inbox() {
   );
 }
 
+function formatBytes(n: number): string {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function EmailAttachments({
+  messageId,
+  attachments,
+}: {
+  messageId: string;
+  attachments: Array<{ filename: string; mime_type: string; size: number; attachment_id: string }>;
+}) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [previewing, setPreviewing] = useState<{ url: string; mime: string; name: string } | null>(null);
+
+  const fetchAttachment = useCallback(async (att: { attachment_id: string; mime_type: string; filename: string }) => {
+    if (urls[att.attachment_id]) return urls[att.attachment_id];
+    setLoading((s) => ({ ...s, [att.attachment_id]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-attachment", {
+        body: { message_id: messageId, attachment_id: att.attachment_id, mime_type: att.mime_type },
+      });
+      if (error || !data?.data_url) throw new Error(data?.error || error?.message || "Falha ao baixar");
+      setUrls((u) => ({ ...u, [att.attachment_id]: data.data_url }));
+      return data.data_url as string;
+    } catch (e: any) {
+      toast({ title: "Erro ao baixar anexo", description: e.message, variant: "destructive" });
+      return null;
+    } finally {
+      setLoading((s) => ({ ...s, [att.attachment_id]: false }));
+    }
+  }, [messageId, urls, toast]);
+
+  // Auto-load images for inline preview
+  useEffect(() => {
+    attachments.forEach((att) => {
+      if (att.mime_type?.startsWith("image/") && !urls[att.attachment_id] && !loading[att.attachment_id]) {
+        fetchAttachment(att);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachments, messageId]);
+
+  const handleDownload = async (att: { attachment_id: string; mime_type: string; filename: string }) => {
+    const url = urls[att.attachment_id] || await fetchAttachment(att);
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = att.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handlePreview = async (att: { attachment_id: string; mime_type: string; filename: string }) => {
+    const url = urls[att.attachment_id] || await fetchAttachment(att);
+    if (!url) return;
+    setPreviewing({ url, mime: att.mime_type, name: att.filename });
+  };
+
+  return (
+    <div className="pt-4 border-t border-border/60 space-y-2">
+      <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+        <Paperclip className="h-3.5 w-3.5" />
+        {attachments.length} anexo{attachments.length > 1 ? "s" : ""}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {attachments.map((att) => {
+          const isImg = att.mime_type?.startsWith("image/");
+          const isPdf = att.mime_type === "application/pdf";
+          const url = urls[att.attachment_id];
+          const isLoading = loading[att.attachment_id];
+          return (
+            <div key={att.attachment_id} className="border border-border rounded-lg p-2 bg-card flex flex-col gap-2">
+              {isImg && url ? (
+                <button
+                  type="button"
+                  onClick={() => handlePreview(att)}
+                  className="bg-muted rounded overflow-hidden h-32 flex items-center justify-center"
+                >
+                  <img src={url} alt={att.filename} className="max-h-full max-w-full object-contain" />
+                </button>
+              ) : (
+                <div className="bg-muted rounded h-32 flex items-center justify-center">
+                  {isLoading ? (
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  ) : isImg ? (
+                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                  ) : (
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate" title={att.filename}>{att.filename}</p>
+                  <p className="text-[10px] text-muted-foreground">{formatBytes(att.size)}</p>
+                </div>
+                <div className="flex gap-1">
+                  {(isImg || isPdf) && (
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handlePreview(att)} disabled={isLoading} title="Visualizar">
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleDownload(att)} disabled={isLoading} title="Baixar">
+                    {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {previewing && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setPreviewing(null)}
+        >
+          <div className="bg-background rounded-lg overflow-hidden max-w-5xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-3 border-b border-border">
+              <p className="text-sm font-medium truncate">{previewing.name}</p>
+              <div className="flex gap-2">
+                <a href={previewing.url} download={previewing.name}>
+                  <Button variant="outline" size="sm"><Download className="h-3.5 w-3.5 mr-1" />Baixar</Button>
+                </a>
+                <Button variant="ghost" size="sm" onClick={() => setPreviewing(null)}>×</Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-muted">
+              {previewing.mime.startsWith("image/") ? (
+                <img src={previewing.url} alt={previewing.name} className="max-w-full mx-auto" />
+              ) : (
+                <iframe src={previewing.url} title={previewing.name} className="w-full h-[80vh] bg-white" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

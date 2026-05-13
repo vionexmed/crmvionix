@@ -49,8 +49,21 @@ serve(async (req) => {
   }
 
   try {
-    const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Prefer per-org credentials, fallback to env secrets
+    const { data: cfgRow } = await supabaseAdmin
+      .from("integration_configs")
+      .select("config")
+      .eq("org_id", state.org_id)
+      .eq("provider", "gmail")
+      .maybeSingle();
+    const cfg: any = cfgRow?.config ?? {};
+    const clientId = cfg.client_id || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    const clientSecret = cfg.client_secret || Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) return htmlResponse("Credenciais OAuth não configuradas.", false, finalReturn);
 
     const redirectUri = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/gmail-oauth-callback`;

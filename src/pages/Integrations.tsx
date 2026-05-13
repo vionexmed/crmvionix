@@ -313,7 +313,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
       {/* Config Dialog */}
       <Dialog open={!!editProvider} onOpenChange={() => setEditProvider(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm">
               Configurar {integrations.find((i) => i.provider === editProvider)?.name}
@@ -398,7 +398,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
 
       {/* Slack Setup Guide */}
       <Dialog open={slackSetupGuide} onOpenChange={setSlackSetupGuide}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
@@ -586,7 +586,7 @@ function WebhooksTab({ orgId }: { orgId: string | null }) {
 
       {/* Create Webhook Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-sm">Novo Webhook</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">

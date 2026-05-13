@@ -81,6 +81,28 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
       setContacts(contactsList);
       setDeals(dealsList);
       setTemplates((t.data as Template[]) || []);
+      // Build known emails dictionary from contacts + history
+      const dict = new Map<string, { email: string; name?: string }>();
+      contactsList.forEach((ct) => {
+        if (ct.email) {
+          const k = ct.email.toLowerCase();
+          dict.set(k, { email: ct.email, name: `${ct.first_name} ${ct.last_name || ""}`.trim() });
+        }
+      });
+      const pushEmail = (raw: any) => {
+        if (!raw) return;
+        const str = typeof raw === "string" ? raw : raw?.email || "";
+        if (!str || !str.includes("@")) return;
+        const k = str.toLowerCase();
+        if (!dict.has(k)) dict.set(k, { email: str });
+      };
+      ((e.data as any[]) || []).forEach((row) => {
+        pushEmail(row.from_email);
+        (row.to_emails || []).forEach(pushEmail);
+        (row.cc_emails || []).forEach(pushEmail);
+        (row.bcc_emails || []).forEach(pushEmail);
+      });
+      setKnownEmails(Array.from(dict.values()));
       // Auto-fill "to" from defaultContactId
       if (!defaultTo && defaultContactId && defaultContactId !== "none") {
         const contact = contactsList.find((ct) => ct.id === defaultContactId);

@@ -16,8 +16,6 @@ import {
   Plug,
   Shield,
   Handshake,
-  Megaphone,
-  Bookmark,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";

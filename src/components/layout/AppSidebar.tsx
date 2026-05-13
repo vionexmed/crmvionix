@@ -16,6 +16,7 @@ import {
   Plug,
   Shield,
   Handshake,
+  Megaphone,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
@@ -140,6 +141,30 @@ export function AppSidebar() {
           </SidebarGroup>
           {renderNavGroup(emailItems, "Email")}
           {renderNavGroup(analyticsItems, "Analytics")}
+          <SidebarGroup>
+            <SidebarGroupContent>
+              {!collapsed && (
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Mídia
+                </p>
+              )}
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Mídia Digital">
+                    <a
+                      href="https://carousel-magic-spark-16.lovable.app"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:bg-accent/50"
+                    >
+                      <Megaphone className="h-4 w-4" />
+                      {!collapsed && <span>Mídia Digital</span>}
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
           {renderNavGroup(adminItems, "Admin")}
         </SidebarContent>
         <SidebarFooter className="border-t border-border p-3">

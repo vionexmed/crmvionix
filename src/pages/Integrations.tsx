@@ -199,6 +199,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
       connectAction: handleGmailConnect,
       connectLoading: gmailConnecting,
       fields: [
+        { key: "client_id", label: "Google OAuth Client ID", placeholder: "xxxxxxx.apps.googleusercontent.com", type: "secret" as const,
+          helpText: "Crie credenciais OAuth 2.0 em",
+          helpUrl: "https://console.cloud.google.com/apis/credentials",
+          helpLabel: "Google Cloud Console" },
+        { key: "client_secret", label: "Google OAuth Client Secret", placeholder: "GOCSPX-...", type: "secret" as const },
         { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial" },
         { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nMinha Empresa", type: "textarea" as const },
       ],

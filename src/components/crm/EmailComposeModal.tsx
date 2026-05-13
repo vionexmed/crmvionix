@@ -162,6 +162,17 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
       toast({ title: "Preencha destinatário e assunto", variant: "destructive" });
       return;
     }
+    // Preserve user's spacing/paragraphs: convert plain text to HTML if body isn't already HTML
+    const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(body);
+    const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c] as string));
+    const toHtml = (txt: string) => {
+      const paragraphs = txt.replace(/\r\n/g, "\n").split(/\n{2,}/);
+      return paragraphs
+        .map((p) => `<p style="margin:0 0 12px 0;line-height:1.5">${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
+        .join("");
+    };
+    const htmlBody = looksLikeHtml ? body : toHtml(body);
+
     setSending(true);
     const { data, error } = await supabase.functions.invoke("gmail-send", {
       body: {
@@ -173,7 +184,7 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
         cc: cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [],
         bcc: bcc ? bcc.split(",").map((e) => e.trim()).filter(Boolean) : [],
         subject,
-        html: body,
+        html: htmlBody,
       },
     });
     setSending(false);

@@ -322,7 +322,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           <div className="space-y-3">
             {editProvider === "gmail" && (
               <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
-                Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais (nome e assinatura).
+                Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais — preencha sua assinatura com logo e dados de contato para aparecer em todos os emails enviados.
               </div>
             )}
             {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => {

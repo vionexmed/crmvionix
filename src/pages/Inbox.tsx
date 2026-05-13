@@ -632,12 +632,3 @@ export default function Inbox() {
   );
 }
 
-function senderColor(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return `hsl(${h} 60% 45%)`;
-}
-
-function getInitials(name: string) {
-  return name.split(/[\s@.]+/).filter(Boolean).map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}

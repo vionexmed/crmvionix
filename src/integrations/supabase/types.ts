@@ -912,8 +912,12 @@ export type Database = {
           direction: string
           from_email: string | null
           id: string
+          importance: string | null
           is_archived: boolean | null
           is_read: boolean | null
+          is_spam: boolean
+          is_starred: boolean
+          is_trashed: boolean
           last_clicked_at: string | null
           last_opened_at: string | null
           message_id: string | null
@@ -941,8 +945,12 @@ export type Database = {
           direction?: string
           from_email?: string | null
           id?: string
+          importance?: string | null
           is_archived?: boolean | null
           is_read?: boolean | null
+          is_spam?: boolean
+          is_starred?: boolean
+          is_trashed?: boolean
           last_clicked_at?: string | null
           last_opened_at?: string | null
           message_id?: string | null
@@ -970,8 +978,12 @@ export type Database = {
           direction?: string
           from_email?: string | null
           id?: string
+          importance?: string | null
           is_archived?: boolean | null
           is_read?: boolean | null
+          is_spam?: boolean
+          is_starred?: boolean
+          is_trashed?: boolean
           last_clicked_at?: string | null
           last_opened_at?: string | null
           message_id?: string | null

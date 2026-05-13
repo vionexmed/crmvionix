@@ -570,6 +570,13 @@ export default function Inbox() {
                 dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || "<p class='text-muted-foreground'>(sem conteúdo)</p>" }}
               />
 
+              {(selectedEmail.attachments?.length ?? 0) > 0 && (
+                <EmailAttachments
+                  messageId={selectedEmail.message_id || ""}
+                  attachments={selectedEmail.attachments || []}
+                />
+              )}
+
               {/* Quick reply chips */}
               {!replyMode && (
                 <div className="flex flex-wrap gap-2 pt-4">

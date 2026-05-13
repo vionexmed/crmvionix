@@ -95,10 +95,7 @@ serve(async (req) => {
 
     const expiresAt = new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString();
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // supabaseAdmin already created above
 
     const { error: upErr } = await supabaseAdmin
       .from("gmail_oauth_tokens")

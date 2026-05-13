@@ -13,7 +13,7 @@ import {
   Reply, ReplyAll, Forward, ChevronLeft, Inbox as InboxIcon,
   Eye, MousePointerClick, RefreshCw, Trash2, AlertOctagon,
   FileText, SendHorizonal, Pencil, Printer, MoreVertical, Tag,
-  Paperclip, Download, Image as ImageIcon, Loader2,
+  Paperclip, Download, Image as ImageIcon, Loader2, Maximize2, Minimize2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,

@@ -166,6 +166,7 @@ serve(async (req) => {
         const dateHeader = getHeader(headers, "Date");
         const sentAt = dateHeader ? new Date(dateHeader).toISOString() : new Date(Number(msg.internalDate)).toISOString();
         const { html, text } = extractBody(msg.payload);
+        const attachments = extractAttachments(msg.payload);
         const isUnread = (msg.labelIds ?? []).includes("UNREAD");
 
         // Try to match contact by from_email
@@ -195,6 +196,7 @@ serve(async (req) => {
           thread_id: msg.threadId ?? null,
           is_read: !isUnread,
           sent_at: sentAt,
+          attachments,
         });
         synced++;
       } catch (e) {

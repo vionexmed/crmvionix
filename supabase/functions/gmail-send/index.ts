@@ -6,19 +6,60 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function utf8Base64(value: string) {
+  const bytes = new TextEncoder().encode(value.normalize("NFC"));
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function wrapBase64(value: string) {
+  return value.replace(/.{1,76}/g, "$&\r\n").trimEnd();
+}
+
+function encodeHeader(value: string) {
+  const normalized = value.normalize("NFC");
+  return /[^\x20-\x7E]/.test(normalized) ? `=?UTF-8?B?${utf8Base64(normalized)}?=` : normalized;
+}
+
+function encodeAddressHeader(value: string) {
+  return value
+    .split(",")
+    .map((part) => {
+      const trimmed = part.trim();
+      const match = trimmed.match(/^(.*)<([^>]+)>$/);
+      if (!match) return trimmed;
+      const name = match[1].trim().replace(/^"|"$/g, "");
+      const email = match[2].trim();
+      return name ? `${encodeHeader(name)} <${email}>` : email;
+    })
+    .join(", ");
+}
+
+function asEmailHtml(value: string) {
+  const html = value.normalize("NFC");
+  if (/<!doctype|<html[\s>]/i.test(html)) return html;
+  return `<!doctype html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
+}
+
 function encodeRaw(opts: { to: string; from: string; cc?: string; bcc?: string; subject: string; html?: string; text?: string }) {
-  const lines = [`To: ${opts.to}`, `From: ${opts.from}`];
+  const content = opts.html ? asEmailHtml(opts.html) : (opts.text ?? "").normalize("NFC");
+  const lines = [`To: ${encodeAddressHeader(opts.to)}`, `From: ${encodeAddressHeader(opts.from)}`];
   if (opts.cc) lines.push(`Cc: ${opts.cc}`);
   if (opts.bcc) lines.push(`Bcc: ${opts.bcc}`);
   lines.push(
-    `Subject: ${opts.subject}`,
+    `Subject: ${encodeHeader(opts.subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: text/${opts.html ? "html" : "plain"}; charset="UTF-8"`,
+    "Content-Transfer-Encoding: base64",
     "",
-    opts.html ?? opts.text ?? "",
+    wrapBase64(utf8Base64(content)),
   );
   const raw = lines.join("\r\n");
-  const b64 = btoa(unescape(encodeURIComponent(raw)));
+  const b64 = utf8Base64(raw);
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 

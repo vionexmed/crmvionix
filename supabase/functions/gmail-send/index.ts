@@ -78,32 +78,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: tokenRow } = await supabaseAdmin
-      .from("gmail_oauth_tokens")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!tokenRow) {
-      return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Conecte sua conta Gmail em Integrações." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    let accessToken = tokenRow.access_token as string;
-    if (new Date(tokenRow.expires_at).getTime() - Date.now() < 60_000) {
-      const refreshed = await refreshAccessToken(tokenRow.refresh_token as string);
-      accessToken = refreshed.access_token;
-      await supabaseAdmin.from("gmail_oauth_tokens").update({
-        access_token: accessToken,
-        expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("id", tokenRow.id);
-    }
-
-    // Optional from_name + structured signature from integration_configs
+    // Load integration config first to decide auth mode (connector vs oauth_byok)
     const { data: cfgRow } = await supabaseAdmin
       .from("integration_configs")
       .select("config")
@@ -111,7 +86,52 @@ serve(async (req) => {
       .eq("provider", "gmail")
       .maybeSingle();
     const cfg: any = cfgRow?.config ?? {};
-    const fromEmail = tokenRow.email as string;
+    const mode: string = cfg.mode || "oauth_byok";
+
+    let accessToken = "";
+    let fromEmail = "";
+    let useConnector = false;
+    let connectorApiKey = "";
+    let lovableApiKey = "";
+
+    if (mode === "connector") {
+      connectorApiKey = Deno.env.get("GOOGLE_MAIL_API_KEY") ?? "";
+      lovableApiKey = Deno.env.get("LOVABLE_API_KEY") ?? "";
+      if (!connectorApiKey || !lovableApiKey) {
+        return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Conector Gmail não está vinculado ao projeto." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      useConnector = true;
+      fromEmail = cfg.email || "";
+    } else {
+      const { data: tokenRow } = await supabaseAdmin
+        .from("gmail_oauth_tokens")
+        .select("*")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!tokenRow) {
+        return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Conecte sua conta Gmail em Integrações." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      accessToken = tokenRow.access_token as string;
+      if (new Date(tokenRow.expires_at).getTime() - Date.now() < 60_000) {
+        const refreshed = await refreshAccessToken(tokenRow.refresh_token as string);
+        accessToken = refreshed.access_token;
+        await supabaseAdmin.from("gmail_oauth_tokens").update({
+          access_token: accessToken,
+          expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", tokenRow.id);
+      }
+      fromEmail = tokenRow.email as string;
+    }
+
     const from = cfg.from_name ? `${cfg.from_name} <${fromEmail}>` : fromEmail;
 
     // Fallback: per-user default signature stored in email_signatures
@@ -172,9 +192,20 @@ serve(async (req) => {
       text: finalText,
     });
 
-    const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    const sendUrl = useConnector
+      ? "https://connector-gateway.lovable.dev/google_mail/gmail/v1/users/me/messages/send"
+      : "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+    const sendHeaders: Record<string, string> = useConnector
+      ? {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "X-Connection-Api-Key": connectorApiKey,
+          "Content-Type": "application/json",
+        }
+      : { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+    const sendRes = await fetch(sendUrl, {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      headers: sendHeaders,
       body: JSON.stringify({ raw }),
     });
     const sendData = await sendRes.json();

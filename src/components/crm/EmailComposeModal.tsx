@@ -62,6 +62,10 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiSubjects, setAiSubjects] = useState<string[]>([]);
+  const [knownEmails, setKnownEmails] = useState<{ email: string; name?: string }[]>([]);
+  const [toFocusField, setToFocusField] = useState<"to" | "cc" | "bcc" | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   useEffect(() => {
     if (!open || !orgId) return;
     setTo(defaultTo || ""); setSubject(""); setBody(""); setCc(""); setBcc("");
@@ -70,7 +74,8 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
       supabase.from("contacts").select("id,first_name,last_name,email,org_id").eq("org_id", orgId),
       supabase.from("deals").select("id,title,org_id,contact_id").eq("org_id", orgId),
       supabase.from("email_templates").select("*").eq("org_id", orgId),
-    ]).then(([c, d, t]) => {
+      supabase.from("emails").select("from_email,to_emails,cc_emails,bcc_emails").eq("org_id", orgId).order("created_at", { ascending: false }).limit(500),
+    ]).then(([c, d, t, e]) => {
       const contactsList = (c.data as Contact[]) || [];
       const dealsList = (d.data as Deal[]) || [];
       setContacts(contactsList);

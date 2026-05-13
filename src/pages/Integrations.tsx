@@ -111,22 +111,15 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
     if (provider === "gmail") {
-      const { data, error } = await supabase.functions.invoke("gmail-connect", {
-        body: {
-          org_id: orgId,
-          from_name: editConfig.from_name || null,
-          signature: editConfig.signature || null,
-        },
-      });
-      if (error || data?.error) {
-        toast({
-          title: "Falha ao conectar Gmail",
-          description: data?.message || error?.message || "Verifique a conexão Google no Lovable",
-          variant: "destructive",
-        });
-        return;
+      // Just save optional from_name/signature; OAuth is handled by Conectar button
+      const existing = getConfig("gmail");
+      const merged = { ...(existing?.config || {}), from_name: editConfig.from_name || null, signature: editConfig.signature || null };
+      if (existing) {
+        await supabase.from("integration_configs").update({ config: merged } as any).eq("id", existing.id);
+      } else {
+        await supabase.from("integration_configs").insert({ org_id: orgId, provider: "gmail", config: merged, connected_by: userId } as any);
       }
-      toast({ title: `Gmail conectado: ${data.email}` });
+      toast({ title: "Configurações do Gmail salvas" });
       setEditProvider(null);
       fetchConfigs();
       return;

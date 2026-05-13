@@ -647,7 +647,8 @@ export default function Inbox() {
               )}
             </div>
           </ScrollArea>
-        </div>
+          </div>
+        </>
       )}
 
       <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} onSent={fetchData} />

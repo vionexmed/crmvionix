@@ -25,6 +25,7 @@ import {
   Check, ExternalLink, RefreshCw, Eye, EyeOff, Loader2, Globe, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { LogoUploadField } from "@/components/crm/LogoUploadField";
 
 // ── Types ──
 type IntegrationConfig = {

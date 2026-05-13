@@ -48,6 +48,7 @@ export default function Settings() {
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="pipelines">Pipelines</TabsTrigger>
           <TabsTrigger value="custom-fields">Campos</TabsTrigger>
+          <TabsTrigger value="email-signature"><Mail className="h-3 w-3 mr-1" />Assinatura</TabsTrigger>
           <TabsTrigger value="members" onClick={() => window.location.href = '/team'}>Membros</TabsTrigger>
           <TabsTrigger value="notifications">Notificações</TabsTrigger>
           <TabsTrigger value="appearance">Aparência</TabsTrigger>
@@ -63,6 +64,9 @@ export default function Settings() {
         <TabsContent value="custom-fields" className="mt-4">
           <CustomFieldsTab orgId={orgId} />
         </TabsContent>
+        <TabsContent value="email-signature" className="mt-4">
+          <EmailSignatureTab orgId={orgId} />
+        </TabsContent>
         <TabsContent value="members" className="mt-4">
           <MembersTab orgId={orgId} userId={user?.id} />
         </TabsContent>
@@ -76,6 +80,139 @@ export default function Settings() {
           <BillingTab orgId={orgId} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── Email Signature Tab ──
+function EmailSignatureTab({ orgId }: { orgId: string | null }) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [cfg, setCfg] = useState<Record<string, string>>({
+    from_name: "",
+    signature_logo_url: "",
+    signature_name: "",
+    signature_role: "",
+    signature_company: "",
+    signature_phone: "",
+    signature_email: "",
+    signature_website: "",
+    signature_extra: "",
+  });
+
+  useEffect(() => {
+    if (!orgId) return;
+    setLoading(true);
+    supabase.from("integration_configs").select("config").eq("org_id", orgId).eq("provider", "gmail").maybeSingle().then(({ data }) => {
+      const c: any = data?.config || {};
+      setCfg((prev) => ({ ...prev, ...Object.fromEntries(Object.keys(prev).map((k) => [k, c[k] ?? ""])) }));
+      setLoading(false);
+    });
+  }, [orgId]);
+
+  const save = async () => {
+    if (!orgId) return;
+    setSaving(true);
+    const { data: existing } = await supabase.from("integration_configs").select("id, config").eq("org_id", orgId).eq("provider", "gmail").maybeSingle();
+    const merged = { ...((existing?.config as any) || {}), ...cfg };
+    const { error } = existing
+      ? await supabase.from("integration_configs").update({ config: merged }).eq("id", existing.id)
+      : await supabase.from("integration_configs").insert({ org_id: orgId, provider: "gmail", config: merged });
+    setSaving(false);
+    toast(error ? { title: "Erro", description: error.message, variant: "destructive" } : { title: "Assinatura salva" });
+  };
+
+  const set = (k: string, v: string) => setCfg((p) => ({ ...p, [k]: v }));
+
+  const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;" }[c] as string));
+  const previewHtml = (() => {
+    const rows: string[] = [];
+    if (cfg.signature_name) rows.push(`<div style="font-weight:600;color:#111;font-size:14px">${escapeHtml(cfg.signature_name)}</div>`);
+    if (cfg.signature_role || cfg.signature_company) {
+      const rc = [cfg.signature_role, cfg.signature_company].filter(Boolean).map(escapeHtml).join(" · ");
+      rows.push(`<div style="color:#444;font-size:12px">${rc}</div>`);
+    }
+    const parts: string[] = [];
+    if (cfg.signature_phone) parts.push(escapeHtml(cfg.signature_phone));
+    if (cfg.signature_email) parts.push(escapeHtml(cfg.signature_email));
+    if (cfg.signature_website) parts.push(escapeHtml(cfg.signature_website));
+    if (parts.length) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${parts.join(" &nbsp;|&nbsp; ")}</div>`);
+    if (cfg.signature_extra) rows.push(`<div style="color:#666;font-size:12px;margin-top:4px">${escapeHtml(cfg.signature_extra).replace(/\n/g,"<br/>")}</div>`);
+    const logo = cfg.signature_logo_url ? `<td style="padding-right:14px;vertical-align:top"><img src="${escapeHtml(cfg.signature_logo_url)}" alt="" style="max-height:64px;max-width:140px;display:block"/></td>` : "";
+    return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif"><tr>${logo}<td style="vertical-align:top">${rows.join("")}</td></tr></table>`;
+  })();
+
+  if (loading) return <div className="text-xs text-muted-foreground">Carregando...</div>;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Assinatura de E-mail</CardTitle>
+          <CardDescription className="text-[10px]">
+            Configure a assinatura usada automaticamente nos e-mails enviados pelo CRM.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs">Logo</Label>
+            <LogoUploadField value={cfg.signature_logo_url} onChange={(url) => set("signature_logo_url", url)} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome de exibição (remetente)</Label>
+              <Input value={cfg.from_name} onChange={(e) => set("from_name", e.target.value)} placeholder="João Silva" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Nome</Label>
+              <Input value={cfg.signature_name} onChange={(e) => set("signature_name", e.target.value)} placeholder="João Silva" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Cargo</Label>
+              <Input value={cfg.signature_role} onChange={(e) => set("signature_role", e.target.value)} placeholder="Diretor Comercial" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Empresa</Label>
+              <Input value={cfg.signature_company} onChange={(e) => set("signature_company", e.target.value)} placeholder="Minha Empresa Ltda" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Telefone</Label>
+              <Input value={cfg.signature_phone} onChange={(e) => set("signature_phone", e.target.value)} placeholder="+55 11 99999-9999" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">E-mail</Label>
+              <Input value={cfg.signature_email} onChange={(e) => set("signature_email", e.target.value)} placeholder="joao@empresa.com" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Website</Label>
+              <Input value={cfg.signature_website} onChange={(e) => set("signature_website", e.target.value)} placeholder="https://empresa.com" className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">Texto adicional (opcional)</Label>
+              <Textarea value={cfg.signature_extra} onChange={(e) => set("signature_extra", e.target.value)} placeholder="Endereço, redes sociais, etc." className="text-xs min-h-[70px]" />
+            </div>
+          </div>
+
+          <Button size="sm" className="h-8 text-xs" onClick={save} disabled={saving}>
+            {saving ? "Salvando..." : "Salvar Assinatura"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Pré-visualização</CardTitle>
+          <CardDescription className="text-[10px]">Como sua assinatura aparecerá nos e-mails</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-border bg-background p-4">
+            <div className="text-xs text-muted-foreground mb-3">— Conteúdo do e-mail —</div>
+            <div className="border-t border-border pt-3" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

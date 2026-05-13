@@ -53,6 +53,12 @@ const emailItems = [
   { title: "Sequências", url: "/email-sequences", icon: Zap },
 ];
 
+const marketingItems = [
+  { title: "Visão Geral", url: "/marketing", icon: Megaphone },
+  { title: "Campanhas", url: "/marketing/campaigns", icon: Target },
+  { title: "Insights", url: "/marketing/insights", icon: BarChart3 },
+];
+
 const analyticsItems = [
   { title: "Metas", url: "/sales-goals", icon: Target },
   { title: "Lead Scoring", url: "/lead-scoring", icon: Target },

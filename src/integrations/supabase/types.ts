@@ -389,6 +389,7 @@ export type Database = {
           last_name: string | null
           lead_score: number | null
           linkedin_url: string | null
+          metadata: Json
           org_id: string
           owner_id: string | null
           phone: string | null
@@ -406,6 +407,7 @@ export type Database = {
           last_name?: string | null
           lead_score?: number | null
           linkedin_url?: string | null
+          metadata?: Json
           org_id: string
           owner_id?: string | null
           phone?: string | null
@@ -423,6 +425,7 @@ export type Database = {
           last_name?: string | null
           lead_score?: number | null
           linkedin_url?: string | null
+          metadata?: Json
           org_id?: string
           owner_id?: string | null
           phone?: string | null

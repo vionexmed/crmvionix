@@ -111,22 +111,15 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
     if (provider === "gmail") {
-      const { data, error } = await supabase.functions.invoke("gmail-connect", {
-        body: {
-          org_id: orgId,
-          from_name: editConfig.from_name || null,
-          signature: editConfig.signature || null,
-        },
-      });
-      if (error || data?.error) {
-        toast({
-          title: "Falha ao conectar Gmail",
-          description: data?.message || error?.message || "Verifique a conexão Google no Lovable",
-          variant: "destructive",
-        });
-        return;
+      // Just save optional from_name/signature; OAuth is handled by Conectar button
+      const existing = getConfig("gmail");
+      const merged = { ...(existing?.config || {}), from_name: editConfig.from_name || null, signature: editConfig.signature || null };
+      if (existing) {
+        await supabase.from("integration_configs").update({ config: merged } as any).eq("id", existing.id);
+      } else {
+        await supabase.from("integration_configs").insert({ org_id: orgId, provider: "gmail", config: merged, connected_by: userId } as any);
       }
-      toast({ title: `Gmail conectado: ${data.email}` });
+      toast({ title: "Configurações do Gmail salvas" });
       setEditProvider(null);
       fetchConfigs();
       return;
@@ -179,13 +172,35 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
     setSlackConnecting(false);
   };
 
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const handleGmailConnect = async () => {
+    if (!orgId) return;
+    setGmailConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-oauth-start", {
+        body: { org_id: orgId, return_to: `${window.location.origin}/settings/integrations` },
+      });
+      if (error || !data?.url) {
+        toast({ title: "Falha ao iniciar OAuth", description: data?.error || error?.message || "Erro desconhecido", variant: "destructive" });
+        setGmailConnecting(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      setGmailConnecting(false);
+    }
+  };
+
   const integrations = [
     {
       provider: "gmail", name: "Gmail", icon: Mail,
-      description: "Envie e-mails da sua conta Google conectada (1 clique)",
+      description: "Conecte sua conta Google via OAuth (suas credenciais)",
+      connectAction: handleGmailConnect,
+      connectLoading: gmailConnecting,
       fields: [
-        { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial — VIONEX" },
-        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nVIONEX", type: "textarea" as const },
+        { key: "from_name", label: "Nome de exibição (opcional)", placeholder: "Equipe Comercial" },
+        { key: "signature", label: "Assinatura padrão (opcional)", placeholder: "—\nMinha Empresa", type: "textarea" as const },
       ],
     },
     {
@@ -269,7 +284,7 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
           <div className="space-y-3">
             {editProvider === "gmail" && (
               <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
-                Sua conta Google já está conectada via Lovable. É só clicar em <strong>Salvar</strong> para validar e ativar o envio de e-mails. Os campos abaixo são opcionais.
+                Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais (nome e assinatura).
               </div>
             )}
             {integrations.find((i) => i.provider === editProvider)?.fields.map((field) => (

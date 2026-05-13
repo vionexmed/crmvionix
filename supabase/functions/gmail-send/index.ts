@@ -114,6 +114,15 @@ serve(async (req) => {
     const fromEmail = tokenRow.email as string;
     const from = cfg.from_name ? `${cfg.from_name} <${fromEmail}>` : fromEmail;
 
+    // Fallback: per-user default signature stored in email_signatures
+    const { data: sigRow } = await supabaseAdmin
+      .from("email_signatures")
+      .select("html")
+      .eq("user_id", userId)
+      .eq("is_default", true)
+      .maybeSingle();
+    const fallbackSignatureHtml: string = sigRow?.html ?? "";
+
     const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;" }[c] as string));
     const buildSignatureHtml = (): string => {
       const hasStructured = cfg.signature_name || cfg.signature_role || cfg.signature_company || cfg.signature_phone || cfg.signature_email || cfg.signature_website || cfg.signature_logo_url || cfg.signature_extra;

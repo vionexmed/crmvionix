@@ -304,9 +304,28 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                 ) : field.type === "textarea" ? (
                   <Textarea value={editConfig[field.key] || ""} onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder} className="text-xs min-h-[80px]" />
+                ) : field.type === "secret" || ["client_secret", "refresh_token", "client_id"].includes(field.key) ? (
+                  <div className="relative">
+                    <Input
+                      type={revealed[field.key] ? "text" : "password"}
+                      value={editConfig[field.key] || ""}
+                      onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
+                      placeholder={field.placeholder}
+                      className="h-8 text-xs pr-8 font-mono"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRevealed((s) => ({ ...s, [field.key]: !s[field.key] }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={revealed[field.key] ? "Ocultar" : "Mostrar"}
+                    >
+                      {revealed[field.key] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 ) : (
                   <Input
-                    type={["client_secret", "refresh_token"].includes(field.key) ? "password" : "text"}
+                    type="text"
                     value={editConfig[field.key] || ""}
                     onChange={(e) => setEditConfig({ ...editConfig, [field.key]: e.target.value })}
                     placeholder={field.placeholder}

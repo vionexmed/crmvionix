@@ -261,7 +261,17 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                         {cfg.is_active ? "Conectado" : "Inativo"}
                       </Badge>
                       <Button variant="outline" size="sm" className="ml-auto h-7 text-[10px]"
-                        onClick={() => { setEditProvider(intg.provider); setEditConfig(cfg.config || {}); }}>
+                        onClick={async () => {
+                          setEditProvider(intg.provider);
+                          let base = cfg.config || {};
+                          if (intg.provider === "gmail" && (!base.client_id || !base.client_secret)) {
+                            try {
+                              const { data } = await supabase.functions.invoke("gmail-get-defaults");
+                              if (data) base = { client_id: base.client_id || data.client_id, client_secret: base.client_secret || data.client_secret, ...base };
+                            } catch { /* ignore */ }
+                          }
+                          setEditConfig(base);
+                        }}>
                         Configurar
                       </Button>
                     </>

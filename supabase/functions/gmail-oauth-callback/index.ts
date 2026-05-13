@@ -1,0 +1,137 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+function htmlResponse(message: string, ok: boolean, returnTo: string) {
+  const color = ok ? "#16a34a" : "#dc2626";
+  const title = ok ? "Gmail conectado!" : "Falha ao conectar";
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0b0c;color:#fff}
+    .card{max-width:420px;text-align:center;padding:32px;border:1px solid #27272a;border-radius:12px;background:#111}
+    h1{color:${color};margin:0 0 8px;font-size:18px}
+    p{color:#a1a1aa;font-size:13px;margin:0 0 16px}
+    a{display:inline-block;background:#fff;color:#000;padding:8px 14px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:500}</style></head>
+    <body><div class="card"><h1>${title}</h1><p>${message}</p>
+    <a href="${returnTo}">Voltar ao app</a></div>
+    <script>setTimeout(()=>{window.location.href=${JSON.stringify(returnTo)}},1800)</script>
+    </body></html>`,
+    { headers: { "Content-Type": "text/html; charset=utf-8" }, status: ok ? 200 : 400 },
+  );
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
+  const stateParam = url.searchParams.get("state");
+  const errorParam = url.searchParams.get("error");
+
+  let returnTo = "/settings/integrations";
+  let state: any = {};
+  try {
+    if (stateParam) state = JSON.parse(atob(stateParam));
+    if (state.return_to) returnTo = state.return_to;
+  } catch (_) { /* ignore */ }
+
+  // Build absolute return URL using referer/origin if needed
+  const origin = req.headers.get("referer")?.split("/").slice(0, 3).join("/") ?? "";
+  const finalReturn = returnTo.startsWith("http") ? returnTo : `${origin}${returnTo}`;
+
+  if (errorParam) return htmlResponse(`Google retornou: ${errorParam}`, false, finalReturn || returnTo);
+  if (!code || !state.user_id || !state.org_id) {
+    return htmlResponse("Parâmetros inválidos.", false, finalReturn || returnTo);
+  }
+
+  try {
+    const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET");
+    if (!clientId || !clientSecret) return htmlResponse("Credenciais OAuth não configuradas.", false, finalReturn);
+
+    const redirectUri = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/gmail-oauth-callback`;
+
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    const tok = await tokenRes.json();
+    if (!tokenRes.ok) {
+      console.error("token exchange failed:", tok);
+      return htmlResponse(tok.error_description || "Falha na troca de tokens.", false, finalReturn);
+    }
+
+    // Fetch user email
+    const profRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tok.access_token}` },
+    });
+    const prof = await profRes.json();
+    const email = prof.email;
+    if (!email) return htmlResponse("Não foi possível obter o e-mail Google.", false, finalReturn);
+
+    const expiresAt = new Date(Date.now() + (tok.expires_in ?? 3600) * 1000).toISOString();
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { error: upErr } = await supabaseAdmin
+      .from("gmail_oauth_tokens")
+      .upsert({
+        user_id: state.user_id,
+        org_id: state.org_id,
+        email,
+        access_token: tok.access_token,
+        refresh_token: tok.refresh_token, // present because prompt=consent + access_type=offline
+        expires_at: expiresAt,
+        scope: tok.scope ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,email" });
+
+    if (upErr) {
+      console.error("upsert tokens error:", upErr);
+      return htmlResponse("Erro ao salvar tokens.", false, finalReturn);
+    }
+
+    // Also upsert integration_configs so the existing UI lights up "Conectado"
+    const { data: existing } = await supabaseAdmin
+      .from("integration_configs")
+      .select("id")
+      .eq("org_id", state.org_id)
+      .eq("provider", "gmail")
+      .maybeSingle();
+
+    const cfg = { email, mode: "oauth_byok" };
+    if (existing) {
+      await supabaseAdmin.from("integration_configs")
+        .update({ config: cfg, is_active: true, connected_at: new Date().toISOString() })
+        .eq("id", existing.id);
+    } else {
+      await supabaseAdmin.from("integration_configs").insert({
+        org_id: state.org_id,
+        provider: "gmail",
+        config: cfg,
+        is_active: true,
+        connected_at: new Date().toISOString(),
+        connected_by: state.user_id,
+      });
+    }
+
+    return htmlResponse(`${email} conectado com sucesso.`, true, finalReturn);
+  } catch (err) {
+    console.error("callback error:", err);
+    return htmlResponse((err as Error).message, false, finalReturn);
+  }
+});

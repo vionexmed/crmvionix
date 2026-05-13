@@ -112,9 +112,11 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
     if (provider === "gmail") {
-      // Just save optional from_name/signature; OAuth is handled by Conectar button
+      // Save optional credentials, display name and signature fields; OAuth handled by Conectar
       const existing = getConfig("gmail");
-      const merged = { ...(existing?.config || {}), from_name: editConfig.from_name || null, signature: editConfig.signature || null };
+      const sigKeys = ["client_id","client_secret","from_name","signature","signature_name","signature_role","signature_company","signature_phone","signature_email","signature_website","signature_extra","signature_logo_url"];
+      const merged: any = { ...(existing?.config || {}) };
+      for (const k of sigKeys) merged[k] = editConfig[k] ?? merged[k] ?? null;
       if (existing) {
         await supabase.from("integration_configs").update({ config: merged } as any).eq("id", existing.id);
       } else {

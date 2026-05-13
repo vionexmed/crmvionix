@@ -385,7 +385,8 @@ function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: str
                   </p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditProvider(null)}>Cancelar</Button>

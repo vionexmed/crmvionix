@@ -1,0 +1,101 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const SCOPES = [
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.modify",
+  "https://www.googleapis.com/auth/userinfo.email",
+].join(" ");
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims } = await supabase.auth.getClaims(token);
+    if (!claims?.claims?.sub) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = claims.claims.sub;
+
+    const { return_to } = await req.json().catch(() => ({}));
+
+    // Derive org_id server-side from authenticated profile (never trust client)
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: callerProfile } = await supabaseAdmin
+      .from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    const org_id = callerProfile?.org_id;
+    if (!org_id) {
+      return new Response(JSON.stringify({ error: "No organization" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Prefer per-org credentials saved in integration_configs, fallback to env secret
+    const { data: cfgRow } = await supabaseAdmin
+      .from("integration_configs")
+      .select("config")
+      .eq("org_id", org_id)
+      .eq("provider", "gmail")
+      .maybeSingle();
+    const cfg: any = cfgRow?.config ?? {};
+    const clientId = cfg.client_id || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID");
+    if (!clientId) {
+      return new Response(JSON.stringify({ error: "Google OAuth Client ID não configurado. Adicione em Integrações > Gmail." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const redirectUri = `${supabaseUrl}/functions/v1/gmail-oauth-callback`;
+
+    const state = btoa(JSON.stringify({ user_id: userId, org_id, return_to: return_to || "/settings/integrations", t: Date.now() }));
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: SCOPES,
+      access_type: "offline",
+      prompt: "consent",
+      state,
+    });
+
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    return new Response(JSON.stringify({ url, redirect_uri: redirectUri }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

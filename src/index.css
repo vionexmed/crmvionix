@@ -1,0 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* === VIONEX OFFICIAL PALETTE === */
+    /* Surfaces */
+    --background: 220 14% 97%;         /* #F7F8FA surface */
+    --foreground: 213 41% 10%;         /* #0F1923 text-1 */
+    --card: 0 0% 100%;
+    --card-foreground: 213 41% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 41% 10%;
+    /* Brand */
+    --primary: 187 100% 27%;           /* #007B8A teal */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 97%;
+    --secondary-foreground: 213 41% 10%;
+    --muted: 220 14% 97%;
+    --muted-foreground: 218 11% 65%;   /* #9AA3B0 text-3 */
+    --accent: 188 38% 94%;             /* #EAF5F7 teal-bg */
+    --accent-foreground: 187 100% 27%;
+    --destructive: 0 70% 41%;          /* #B02020 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 12% 91%;             /* #E4E7EC */
+    --input: 220 12% 91%;
+    --ring: 187 100% 27%;
+    --radius: 0.25rem;
+    /* Sidebar — Vionex navy */
+    --sidebar-background: 217 72% 14%; /* #0A1E3D */
+    --sidebar-foreground: 0 0% 60%;
+    --sidebar-primary: 187 97% 36%;    /* #00A4B5 teal-light */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 50% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 217 35% 22%;
+    --sidebar-ring: 187 100% 35%;
+    /* Semantic */
+    --success: 152 82% 22%;            /* #0A6640 */
+    --success-foreground: 0 0% 100%;
+    --warning: 35 87% 30%;             /* #92610A */
+    --warning-foreground: 0 0% 100%;
+    /* Vionex extras (direct hex tokens for components) */
+    --vx-navy: #0A1E3D;
+    --vx-teal: #007B8A;
+    --vx-teal-light: #00A4B5;
+    --vx-teal-bg: #EAF5F7;
+    --vx-teal-border: #B2DDE2;
+    --vx-grafite: #3A3F47;
+    --vx-text-2: #4A5568;
+    --vx-text-3: #9AA3B0;
+    --vx-green: #0A6640;
+    --vx-green-bg: #E6F5EF;
+    --vx-red: #B02020;
+    --vx-red-bg: #FDE8E8;
+    --vx-amber: #92610A;
+    --vx-amber-bg: #FFF3E0;
+    --vx-purple: #5B21B6;
+    --vx-purple-bg: #F3EFFF;
+    --vx-meta: #1877F2;
+    --vx-meta-bg: #EEF4FF;
+    --vx-google: #EA4335;
+    --vx-google-bg: #FDE8E8;
+  }
+
+  .dark {
+    --background: 217 50% 7%;
+    --foreground: 0 0% 96%;
+    --card: 217 45% 10%;
+    --card-foreground: 0 0% 96%;
+    --popover: 217 45% 10%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 187 100% 35%;
+    --primary-foreground: 217 72% 8%;
+    --secondary: 217 35% 14%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 217 35% 14%;
+    --muted-foreground: 218 11% 65%;
+    --accent: 187 60% 14%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 217 30% 18%;
+    --input: 217 30% 18%;
+    --ring: 187 100% 35%;
+    --sidebar-background: 217 72% 10%;
+    --sidebar-foreground: 0 0% 60%;
+    --sidebar-primary: 187 100% 35%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 50% 16%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 217 35% 20%;
+    --sidebar-ring: 187 100% 35%;
+    --success: 152 60% 35%;
+    --success-foreground: 0 0% 98%;
+    --warning: 35 87% 45%;
+    --warning-foreground: 0 0% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 13px;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Poppins', sans-serif;
+    letter-spacing: -0.02em;
+    color: hsl(217 72% 14%);
+  }
+  .dark h1, .dark h2, .dark h3, .dark h4 { color: hsl(0 0% 96%); }
+
+  /* Tabular figures for numeric data */
+  .font-mono, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Keyboard focus ring */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  /* Prevent body scroll when mobile nav visible */
+  @media (max-width: 767px) {
+    .sidebar-open body {
+      overflow: hidden;
+    }
+  }
+}
+
+/* ============================================================
+   VIONEX SCROLLBAR — moderno, fino, paleta navy/teal
+   ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.55);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Sidebar (navy bg) — thumb teal translúcido */
+[data-sidebar="sidebar"], [data-sidebar="sidebar"] * {
+  scrollbar-color: rgba(0, 163, 181, 0.45) transparent;
+}
+[data-sidebar="sidebar"] ::-webkit-scrollbar,
+[data-sidebar="sidebar"]::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-sidebar="sidebar"] ::-webkit-scrollbar-thumb,
+[data-sidebar="sidebar"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 163, 181, 0.40);
+  border-radius: 999px;
+}
+[data-sidebar="sidebar"] ::-webkit-scrollbar-thumb:hover,
+[data-sidebar="sidebar"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 163, 181, 0.75);
+}
+[data-sidebar="sidebar"] ::-webkit-scrollbar-track,
+[data-sidebar="sidebar"]::-webkit-scrollbar-track { background: transparent; }
+
+/* Touch-optimized kanban cards */
+@media (max-width: 767px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+  .overflow-x-auto > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* Onboarding modal slide animations */
+@keyframes onboardingSlideLeft {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes onboardingSlideRight {
+  from { transform: translateX(-30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.onboarding-slide-in {
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* === VIONEX modern animations === */
+@keyframes vxFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes vxScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes vxShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes vxGrowWidth {
+  from { width: 0%; }
+}
+@keyframes vxGrowHeight {
+  from { height: 0%; }
+}
+@keyframes vxPulseSoft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.vx-fade-up { animation: vxFadeUp 0.45s cubic-bezier(.21,.61,.35,1) both; }
+.vx-scale-in { animation: vxScaleIn 0.35s cubic-bezier(.21,.61,.35,1) both; }
+.vx-grow-w  { animation: vxGrowWidth 0.9s cubic-bezier(.21,.61,.35,1) both; }
+.vx-grow-h  { animation: vxGrowHeight 0.8s cubic-bezier(.21,.61,.35,1) both; }
+.vx-shimmer {
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--accent)) 50%, hsl(var(--muted)) 75%);
+  background-size: 200% 100%;
+  animation: vxShimmer 1.4s linear infinite;
+}
+.vx-pulse-dot { animation: vxPulseSoft 1.8s ease-in-out infinite; }
+
+/* Stagger helpers */
+.vx-stagger > * { animation: vxFadeUp 0.45s cubic-bezier(.21,.61,.35,1) both; }
+.vx-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.vx-stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.vx-stagger > *:nth-child(3) { animation-delay: 0.10s; }
+.vx-stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.vx-stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.vx-stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.vx-stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.vx-stagger > *:nth-child(8) { animation-delay: 0.30s; }
+
+/* Hover sutil (apenas borda — sem deslocamento) */
+.vx-card-hover { transition: border-color .2s ease, background .2s ease; }
+.vx-card-hover:hover { border-color: var(--vx-teal-border); }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import { useQueryClient } from "@tanstack/react-query";
+import { useDeals, dealsKeys } from "@/hooks/queries/useDeals";
+import { usePipelines, usePipelineStages, pipelinesKeys } from "@/hooks/queries/usePipelines";
+import { useMembers, membersKeys } from "@/hooks/queries/useMembers";
+import { useActivities, activitiesKeys } from "@/hooks/queries/useActivities";
+import { useContacts, contactsKeys } from "@/hooks/queries/useContacts";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend,
@@ -113,15 +118,44 @@ function GaugeChart({ value, max, label }: { value: number; max: number; label: 
 export default function Dashboard() {
   const { orgId } = useOrg();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [stages, setStages] = useState<Stage[]>([]);
-  const [activities, setActivities] = useState<ActivityRow[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
+  // ── React Query data fetching ──
+  const dealsQuery = useDeals();
+  const stagesQuery = usePipelineStages();
+  const pipelinesQuery = usePipelines();
+  const membersQuery = useMembers();
+  const activitiesQuery = useActivities();
+  const contactsQuery = useContacts({ pageSize: 5000 });
+
+  const deals = (dealsQuery.data?.data ?? []) as Deal[];
+  const stages = (stagesQuery.data ?? []) as Stage[];
+  const pipelines = (pipelinesQuery.data ?? []) as Pipeline[];
+  const members = (membersQuery.data ?? []) as Profile[];
+  const activities = (activitiesQuery.data ?? []) as ActivityRow[];
+  const contacts = (contactsQuery.data?.data ?? []) as Contact[];
+
+  const loading =
+    dealsQuery.isFetching ||
+    stagesQuery.isFetching ||
+    pipelinesQuery.isFetching ||
+    membersQuery.isFetching ||
+    activitiesQuery.isFetching ||
+    contactsQuery.isFetching;
+
+  const lastRefresh = new Date(
+    dealsQuery.dataUpdatedAt || Date.now()
+  );
+
+  const handleRefresh = () => {
+    if (!orgId) return;
+    queryClient.invalidateQueries({ queryKey: dealsKeys.all(orgId) });
+    queryClient.invalidateQueries({ queryKey: pipelinesKeys.stages(orgId) });
+    queryClient.invalidateQueries({ queryKey: pipelinesKeys.pipelines(orgId) });
+    queryClient.invalidateQueries({ queryKey: membersKeys.all(orgId) });
+    queryClient.invalidateQueries({ queryKey: activitiesKeys.all(orgId) });
+    queryClient.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
+  };
 
   // Filters
   const [period, setPeriod] = useState<PeriodFilter>("this_month");
@@ -130,35 +164,6 @@ export default function Dashboard() {
 
   // Revenue goal (from org settings or default)
   const monthlyGoal = 100000;
-
-  const fetchAll = useCallback(async () => {
-    if (!orgId) return;
-    setLoading(true);
-    const [dRes, sRes, aRes, cRes, mRes, pRes] = await Promise.all([
-      supabase.from("deals").select("*").eq("org_id", orgId),
-      supabase.from("pipeline_stages").select("*").eq("org_id", orgId).order("order"),
-      supabase.from("activities").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(500),
-      supabase.from("contacts").select("id,first_name,last_name,lead_score,status,created_at").eq("org_id", orgId),
-      supabase.from("profiles").select("id,name,email").eq("org_id", orgId),
-      supabase.from("pipelines").select("id,name,is_default").eq("org_id", orgId),
-    ]);
-    setDeals((dRes.data as Deal[]) || []);
-    setStages((sRes.data as Stage[]) || []);
-    setActivities((aRes.data as ActivityRow[]) || []);
-    setContacts((cRes.data as Contact[]) || []);
-    setMembers((mRes.data as Profile[]) || []);
-    setPipelines((pRes.data as Pipeline[]) || []);
-    setLoading(false);
-    setLastRefresh(new Date());
-  }, [orgId]);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  // Auto-refresh every 5 min
-  useEffect(() => {
-    const timer = setInterval(fetchAll, 5 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [fetchAll]);
 
   // ── Filtered data ──────────────────
   const periodStart = getPeriodStart(period);
@@ -399,7 +404,7 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
           )}
-          <Button variant="outline" size="sm" className="h-8" onClick={fetchAll} disabled={loading}>
+          <Button variant="outline" size="sm" className="h-8" onClick={handleRefresh} disabled={loading}>
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>

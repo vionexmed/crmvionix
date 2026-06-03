@@ -1,0 +1,72 @@
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { contactsApi } from "@/lib/api/contacts";
+import { activitiesApi } from "@/lib/api/activities";
+import { useOrg } from "@/hooks/useOrg";
+import type { ContactListParams } from "@/lib/api/contacts";
+import type { Database } from "@/integrations/supabase/types";
+
+type ContactStatus = Database["public"]["Enums"]["contact_status"];
+
+export const contactsKeys = {
+  all: (orgId: string) => ["contacts", orgId] as const,
+  list: (orgId: string, params: ContactListParams) => ["contacts", orgId, params] as const,
+  lastActivities: (orgId: string) => ["contacts", orgId, "lastActivities"] as const,
+};
+
+export function useContacts(params: ContactListParams = {}) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: contactsKeys.list(orgId ?? "", params),
+    queryFn: () => contactsApi.list(orgId!, params),
+    enabled: !!orgId,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useLastActivities() {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: contactsKeys.lastActivities(orgId ?? ""),
+    queryFn: () => activitiesApi.lastPerContact(orgId!),
+    enabled: !!orgId,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useDeleteContacts() {
+  const qc = useQueryClient();
+  const { orgId } = useOrg();
+  return useMutation({
+    mutationFn: (ids: string[]) => contactsApi.deleteMany(ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contactsKeys.all(orgId ?? "") }),
+  });
+}
+
+export function useUpdateContactsStatus() {
+  const qc = useQueryClient();
+  const { orgId } = useOrg();
+  return useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: ContactStatus }) =>
+      contactsApi.updateStatus(ids, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contactsKeys.all(orgId ?? "") }),
+  });
+}
+
+export function useLeads() {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: [...contactsKeys.all(orgId ?? ""), "leads"],
+    queryFn: () => contactsApi.listLeads(orgId!),
+    enabled: !!orgId,
+  });
+}
+
+export function useUpdateContactOwner() {
+  const qc = useQueryClient();
+  const { orgId } = useOrg();
+  return useMutation({
+    mutationFn: ({ id, ownerId }: { id: string; ownerId: string | null }) =>
+      contactsApi.updateOwner(id, ownerId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: contactsKeys.all(orgId ?? "") }),
+  });
+}

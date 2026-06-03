@@ -138,6 +138,18 @@ serve(async (req) => {
       return htmlResponse("Erro ao salvar tokens.", false, finalReturn);
     }
 
+    // Upsert email_connections with label/purpose (multi-account support)
+    await supabaseAdmin.from("email_connections").upsert({
+      user_id: state.user_id,
+      org_id: state.org_id,
+      provider: "gmail",
+      email_address: email,
+      label: state.label || "Principal",
+      purpose: state.purpose || "sales",
+      is_active: true,
+      connected_at: new Date().toISOString(),
+    }, { onConflict: "user_id,provider,email_address" });
+
     // Also upsert integration_configs so the existing UI lights up "Conectado"
     const { data: existing } = await supabaseAdmin
       .from("integration_configs")

@@ -49,7 +49,7 @@ export function AppLayout() {
         <AppSidebar />
         <div className="flex flex-1 flex-col min-w-0">
           <AppHeader onOpenSearch={() => setSearchOpen(true)} />
-          <main className="flex-1 p-3 sm:p-6 pb-20 md:pb-6">
+          <main className="flex-1 p-3 sm:p-6 pb-20 md:pb-6 vx-page">
             <Outlet />
           </main>
         </div>

@@ -1,14 +1,20 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Users as UsersIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
-import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useContacts, useLastActivities, useDeleteContacts,
+  useUpdateContactsStatus, useUpdateContactOwner, contactsKeys,
+} from "@/hooks/queries/useContacts";
+import { useCompanies } from "@/hooks/queries/useCompanies";
+import { useMembers } from "@/hooks/queries/useMembers";
+import { PAGE_SIZE } from "@/lib/api/contacts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,14 +25,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Plus, Search, LayoutGrid, List, Filter, ArrowUpDown, Upload, Download,
-  MoreHorizontal, UserPlus, Tag, Trash2, ChevronLeft, ChevronRight, X, AlertTriangle, Users,
+  Trash2, ChevronLeft, ChevronRight, X, AlertTriangle, Users, Loader2,
 } from "lucide-react";
 import { ContactsKanbanByOwner } from "@/components/crm/ContactsKanbanByOwner";
 import {
@@ -36,30 +39,20 @@ import { useToast } from "@/hooks/use-toast";
 import { ContactDrawer } from "@/components/crm/ContactDrawer";
 import { ContactCreateModal } from "@/components/crm/ContactCreateModal";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { Database } from "@/integrations/supabase/types";
 
 type Contact = Database["public"]["Tables"]["contacts"]["Row"];
-type Company = Database["public"]["Tables"]["companies"]["Row"];
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type ContactStatus = Database["public"]["Enums"]["contact_status"];
+type SortKey = "name" | "email" | "status" | "created_at" | "title";
+type SortDir = "asc" | "desc";
+type ViewMode = "table" | "cards" | "owner";
 
-const statusColors: Record<ContactStatus, string> = {
-  lead: "bg-primary/10 text-primary",
-  prospect: "bg-warning/10 text-warning",
-  customer: "bg-success/10 text-success",
-  churned: "bg-destructive/10 text-destructive",
-};
 const statusLabels: Record<ContactStatus, string> = {
   lead: "Lead", prospect: "Prospect", customer: "Cliente", churned: "Churned",
 };
 
 const cleanPhone = (p: string | null) => p || "";
-
-type SortKey = "name" | "email" | "status" | "created_at" | "title";
-type SortDir = "asc" | "desc";
-type ViewMode = "table" | "cards" | "owner";
-
-const PAGE_SIZE = 50;
 
 interface ContactFilters {
   status?: string;
@@ -71,12 +64,10 @@ interface ContactFilters {
 
 export default function Contacts() {
   const { orgId } = useOrg();
-  const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  // UI state
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
@@ -85,12 +76,16 @@ export default function Contacts() {
   const [filters, setFilters] = useState<ContactFilters>({});
   const [showFilters, setShowFilters] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
-
-  // Drawers & modals
   const [drawerContact, setDrawerContact] = useState<Contact | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Debounce search to avoid a query on every keystroke
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Reset to page 0 when filters/search/sort change
+  useEffect(() => { setPage(0); }, [debouncedSearch, filters, sortKey, sortDir]);
 
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -100,32 +95,45 @@ export default function Contacts() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Risk: last activity per contact
-  const [lastActivityMap, setLastActivityMap] = useState<Map<string, Date>>(new Map());
+  // Server-side query — all filtering, sorting and pagination on Postgres
+  const queryParams = {
+    page,
+    pageSize: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    sortKey,
+    sortDir,
+    ...filters,
+  };
+  const { data: result, isFetching } = useContacts(queryParams);
+  const contacts = result?.data ?? [];
+  const totalCount = result?.count ?? 0;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  const fetchData = useCallback(async () => {
+  // Supporting data (small datasets, cached separately)
+  const { data: companies = [] } = useCompanies();
+  const { data: members = [] } = useMembers();
+  const { data: lastActivityMap = new Map() } = useLastActivities();
+
+  // Mutations
+  const { mutateAsync: deleteMany } = useDeleteContacts();
+  const { mutateAsync: updateStatus } = useUpdateContactsStatus();
+  const { mutateAsync: updateOwner } = useUpdateContactOwner();
+
+  // Realtime — invalidate all contact queries on remote changes
+  useEffect(() => {
     if (!orgId) return;
-    const [cRes, coRes, mRes, actRes] = await Promise.all([
-      supabase.from("contacts").select("*").eq("org_id", orgId).neq("status", "lead").order("created_at", { ascending: false }),
-      supabase.from("companies").select("*").eq("org_id", orgId),
-      supabase.from("profiles").select("*").eq("org_id", orgId),
-      supabase.from("activities").select("contact_id,created_at").eq("org_id", orgId).order("created_at", { ascending: false }),
-    ]);
-    setContacts(cRes.data || []);
-    setCompanies(coRes.data || []);
-    setMembers(mRes.data || []);
+    const channel = supabase
+      .channel("contacts-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts", filter: `org_id=eq.${orgId}` }, () => {
+        qc.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [orgId, qc]);
 
-    // Build last activity map
-    const map = new Map<string, Date>();
-    (actRes.data || []).forEach((a: any) => {
-      if (a.contact_id && a.created_at) {
-        const d = new Date(a.created_at);
-        const existing = map.get(a.contact_id);
-        if (!existing || d > existing) map.set(a.contact_id, d);
-      }
-    });
-    setLastActivityMap(map);
-  }, [orgId]);
+  const invalidate = () => {
+    if (orgId) qc.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
+  };
 
   const getInactivityDays = (contactId: string, createdAt: string | null) => {
     const lastAct = lastActivityMap.get(contactId);
@@ -134,73 +142,20 @@ export default function Contacts() {
     return Math.floor((Date.now() - ref.getTime()) / 86400000);
   };
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Realtime subscription for contacts
-  useEffect(() => {
-    if (!orgId) return;
-    const channel = supabase
-      .channel('contacts-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'contacts', filter: `org_id=eq.${orgId}` },
-        () => { fetchData(); }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [orgId, fetchData]);
-
-  // Owner change handler for drag-and-drop
   const handleOwnerChange = async (contactId: string, newOwnerId: string | null) => {
-    setContacts((prev) =>
-      prev.map((c) => (c.id === contactId ? { ...c, owner_id: newOwnerId } : c))
-    );
-    await supabase.from("contacts").update({ owner_id: newOwnerId }).eq("id", contactId);
+    await updateOwner({ id: contactId, ownerId: newOwnerId });
     toast({ title: newOwnerId ? "Responsável atribuído" : "Responsável removido" });
   };
-
-  // Filtering
-  const filtered = useMemo(() => {
-    return contacts.filter((c) => {
-      const searchStr = `${c.first_name} ${c.last_name} ${c.email}`.toLowerCase();
-      if (search && !searchStr.includes(search.toLowerCase())) return false;
-      if (filters.status && filters.status !== "all" && c.status !== filters.status) return false;
-      if (filters.ownerId && c.owner_id !== filters.ownerId) return false;
-      if (filters.companyId && (c as any).company_id !== filters.companyId) return false;
-      if (filters.createdFrom && c.created_at && c.created_at < filters.createdFrom) return false;
-      if (filters.createdTo && c.created_at && c.created_at > filters.createdTo) return false;
-      return true;
-    });
-  }, [contacts, search, filters]);
-
-  // Sorting
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "name": cmp = `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`); break;
-        case "email": cmp = (a.email || "").localeCompare(b.email || ""); break;
-        case "status": cmp = (a.status || "").localeCompare(b.status || ""); break;
-        case "title": cmp = (a.title || "").localeCompare(b.title || ""); break;
-        case "created_at": cmp = (a.created_at || "").localeCompare(b.created_at || ""); break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [filtered, sortKey, sortDir]);
-
-  // Pagination
-  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
-  const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const allSelected = paginated.length > 0 && paginated.every((c) => selectedContacts.has(c.id));
+  const allSelected = contacts.length > 0 && contacts.every((c) => selectedContacts.has(c.id));
   const toggleAll = () => {
     if (allSelected) setSelectedContacts(new Set());
-    else setSelectedContacts(new Set(paginated.map((c) => c.id)));
+    else setSelectedContacts(new Set(contacts.map((c) => c.id)));
   };
   const toggleOne = (id: string) => {
     const next = new Set(selectedContacts);
@@ -208,33 +163,30 @@ export default function Contacts() {
     setSelectedContacts(next);
   };
 
-  // Batch actions
   const batchDelete = async () => {
     const ids = Array.from(selectedContacts);
-    await Promise.all(ids.map((id) => supabase.from("contacts").delete().eq("id", id)));
+    await deleteMany(ids);
     setSelectedContacts(new Set());
-    fetchData();
     toast({ title: `${ids.length} contatos excluídos` });
   };
 
   const batchChangeStatus = async (status: ContactStatus) => {
     const ids = Array.from(selectedContacts);
-    await Promise.all(ids.map((id) => supabase.from("contacts").update({ status }).eq("id", id)));
+    await updateStatus({ ids, status });
     setSelectedContacts(new Set());
-    fetchData();
     toast({ title: `Status atualizado para ${ids.length} contatos` });
   };
 
   const exportCSV = () => {
-    const rows = sorted.map((c) => {
-      const comp = companies.find((co) => co.id === (c as any).company_id);
+    const rows = contacts.map((c) => {
+      const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id);
       return {
         Nome: c.first_name, Sobrenome: c.last_name || "", Email: c.email || "",
         Telefone: cleanPhone(c.phone), Cargo: c.title || "", Empresa: comp?.name || "", Status: c.status || "",
       };
     });
     const headers = Object.keys(rows[0] || {});
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${(r as any)[h] || ""}"`).join(","))].join("\n");
+    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${(r as Record<string, unknown>)[h] || ""}"`).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -253,49 +205,48 @@ export default function Contacts() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <PageHeader
         icon={UsersIcon}
         kicker="Diretório"
         title="Contatos"
-        description={`${filtered.length} contatos cadastrados`}
+        description={`${totalCount} contatos cadastrados`}
         pattern="dots"
         actions={
           <>
             <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-              <button onClick={() => setViewMode("table")} aria-label="Visualização tabela" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                <List className="h-3.5 w-3.5" /><span className="hidden sm:inline">Tabela</span>
-              </button>
-              <button onClick={() => setViewMode("cards")} aria-label="Visualização cartões" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "cards" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                <LayoutGrid className="h-3.5 w-3.5" /><span className="hidden sm:inline">Cartões</span>
-              </button>
-              <button onClick={() => setViewMode("owner")} aria-label="Visualização por vendedor" className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "owner" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                <Users className="h-3.5 w-3.5" /><span className="hidden sm:inline">Vendedor</span>
-              </button>
+              {([
+                { mode: "table" as const, icon: List, label: "Tabela" },
+                { mode: "cards" as const, icon: LayoutGrid, label: "Cartões" },
+                { mode: "owner" as const, icon: Users, label: "Vendedor" },
+              ] as const).map(({ mode, icon: Icon, label }) => (
+                <button key={mode} onClick={() => setViewMode(mode)} aria-label={`Visualização ${label}`}
+                  className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
+            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="mr-1 h-3.5 w-3.5" /><span className="hidden sm:inline">Filtros</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} aria-label="Importar CSV" className="hidden sm:flex">
+            <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} className="hidden sm:flex">
               <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
             </Button>
-            <Button variant="outline" size="sm" onClick={exportCSV} aria-label="Exportar CSV" className="hidden sm:flex">
+            <Button variant="outline" size="sm" onClick={exportCSV} className="hidden sm:flex">
               <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
             </Button>
-            <Button onClick={() => setCreateOpen(true)} aria-label="Criar novo contato">
+            <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo Contato</span><span className="sm:hidden">Novo</span>
             </Button>
           </>
         }
       />
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input placeholder="Buscar por nome, email..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        {isFetching && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
 
-      {/* Filters */}
       {showFilters && (
         <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
           <div className="space-y-1">
@@ -347,7 +298,6 @@ export default function Contacts() {
         </div>
       )}
 
-      {/* Batch Actions */}
       {selectedContacts.size > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2">
           <span className="text-sm font-medium">{selectedContacts.size} selecionados</span>
@@ -368,9 +318,9 @@ export default function Contacts() {
         </div>
       )}
 
-      {/* Table View */}
       {viewMode === "table" && (
-        <div className="rounded-md border border-border overflow-x-auto">
+        <div className="vx-table">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -385,7 +335,7 @@ export default function Contacts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginated.map((c) => (
+              {contacts.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setDrawerContact(c)}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedContacts.has(c.id)} onCheckedChange={() => toggleOne(c.id)} aria-label={`Selecionar ${c.first_name}`} />
@@ -412,9 +362,7 @@ export default function Contacts() {
                                       <AlertTriangle className="h-2.5 w-2.5" />{days}d
                                     </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="text-xs">
-                                    {days} dias sem atividade
-                                  </TooltipContent>
+                                  <TooltipContent side="top" className="text-xs">{days} dias sem atividade</TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             );
@@ -426,32 +374,32 @@ export default function Contacts() {
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden sm:table-cell">{c.email}</TableCell>
                   <TableCell className="text-muted-foreground hidden md:table-cell text-xs">
-                    {(() => { const comp = companies.find((co) => co.id === (c as any).company_id); return comp?.name || "—"; })()}
+                    {(() => { const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id); return comp?.name || "—"; })()}
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden lg:table-cell">{c.title}</TableCell>
                   <TableCell className="text-muted-foreground hidden lg:table-cell">{cleanPhone(c.phone)}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className={statusColors[c.status || "lead"]}>
+                    <span className={`vx-badge vx-badge-${c.status || "lead"}`}>
                       {statusLabels[c.status || "lead"]}
-                    </Badge>
+                    </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
                     {c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "—"}
                   </TableCell>
                 </TableRow>
               ))}
-              {paginated.length === 0 && (
+              {contacts.length === 0 && (
                 <TableRow><TableCell colSpan={8} className="py-10 text-center text-muted-foreground">Nenhum contato encontrado</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 
-      {/* Card View */}
       {viewMode === "cards" && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {paginated.map((c) => (
+          {contacts.map((c) => (
             <Card key={c.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDrawerContact(c)}>
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-3">
@@ -466,22 +414,21 @@ export default function Contacts() {
                   </div>
                 </div>
                 {c.email && <p className="text-xs text-muted-foreground truncate">{c.email}</p>}
-                <Badge variant="secondary" className={`text-[10px] ${statusColors[c.status || "lead"]}`}>
+                <span className={`vx-badge vx-badge-${c.status || "lead"}`}>
                   {statusLabels[c.status || "lead"]}
-                </Badge>
+                </span>
               </CardContent>
             </Card>
           ))}
-          {paginated.length === 0 && (
+          {contacts.length === 0 && (
             <div className="col-span-full py-10 text-center text-muted-foreground">Nenhum contato encontrado</div>
           )}
         </div>
       )}
 
-      {/* Owner Kanban View */}
       {viewMode === "owner" && (
         <ContactsKanbanByOwner
-          contacts={sorted}
+          contacts={contacts}
           members={members}
           companies={companies}
           onContactClick={(c) => setDrawerContact(c)}
@@ -489,11 +436,10 @@ export default function Contacts() {
         />
       )}
 
-      {/* Pagination (table/cards only) */}
       {viewMode !== "owner" && totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            Página {page + 1} de {totalPages} · {sorted.length} contatos
+            Página {page + 1} de {totalPages} · {totalCount} contatos
           </span>
           <div className="flex gap-1">
             <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
@@ -506,28 +452,25 @@ export default function Contacts() {
         </div>
       )}
 
-      {/* Contact Drawer */}
       <ContactDrawer
         contact={drawerContact}
         onClose={() => setDrawerContact(null)}
-        onUpdate={fetchData}
+        onUpdate={invalidate}
         companies={companies}
         members={members}
       />
 
-      {/* Create Modal */}
       <ContactCreateModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={fetchData}
+        onCreated={invalidate}
         companies={companies}
       />
 
-      {/* CSV Import */}
       <CSVImportModal
         open={csvOpen}
         onOpenChange={setCsvOpen}
-        onImported={fetchData}
+        onImported={invalidate}
         entityType="contacts"
       />
     </div>

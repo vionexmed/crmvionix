@@ -78,14 +78,14 @@ serve(async (req) => {
     const gmailProfile = await profileRes.json();
     const emailAddress = gmailProfile.emailAddress;
 
-    // Save email connection
+    // Save email connection (multi-account: conflict on user+provider+email)
     await supabaseAdmin.from("email_connections").upsert({
       user_id: userId,
       org_id,
       provider: "gmail",
       email_address: emailAddress,
       is_active: true,
-    }, { onConflict: "user_id,provider" }).catch(() => {});
+    }, { onConflict: "user_id,provider,email_address" }).catch(() => {});
 
     // Fetch last 90 days of emails (paginated, background)
     const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);

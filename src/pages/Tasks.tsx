@@ -1,8 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CheckSquare as CheckSquareIcon } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +25,16 @@ import {
   Search, User, Users, Calendar,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  useActivities,
+  useCreateActivity,
+  useUpdateActivity,
+  useDeleteActivities,
+} from "@/hooks/queries/useActivities";
+import { useMembers } from "@/hooks/queries/useMembers";
+import { useContacts } from "@/hooks/queries/useContacts";
+import { useDeals } from "@/hooks/queries/useDeals";
+import { useOrg } from "@/hooks/useOrg";
 import type { Database } from "@/integrations/supabase/types";
 
 type Activity = Database["public"]["Tables"]["activities"]["Row"];
@@ -63,10 +71,19 @@ export default function Tasks() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [tasks, setTasks] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  const { data: allActivities = [] } = useActivities();
+  const { data: membersData = [] } = useMembers();
+  const { data: contactsResult } = useContacts({ pageSize: 5000 });
+  const { data: dealsResult } = useDeals();
+
+  const tasks = useMemo(
+    () => (allActivities as Activity[]).filter((a) => a.type === "task"),
+    [allActivities]
+  );
+  const contacts: Contact[] = contactsResult?.data ?? [];
+  const deals: Deal[] = (dealsResult?.data ?? []) as Deal[];
+  const members: Profile[] = membersData as Profile[];
+
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
   const [ownerFilter, setOwnerFilter] = useState<string>("mine");
   const [search, setSearch] = useState("");
@@ -81,32 +98,19 @@ export default function Tasks() {
   const [formDealId, setFormDealId] = useState("none");
   const [formUserId, setFormUserId] = useState("");
 
-  const fetchData = useCallback(async () => {
-    if (!orgId) return;
-    const [tRes, cRes, dRes, mRes] = await Promise.all([
-      supabase.from("activities").select("*").eq("org_id", orgId).eq("type", "task").order("due_date", { ascending: true, nullsFirst: false }),
-      supabase.from("contacts").select("*").eq("org_id", orgId),
-      supabase.from("deals").select("*").eq("org_id", orgId),
-      supabase.from("profiles").select("*").eq("org_id", orgId),
-    ]);
-    setTasks(tRes.data || []);
-    setContacts(cRes.data || []);
-    setDeals(dRes.data || []);
-    setMembers(mRes.data || []);
-  }, [orgId]);
+  const createActivity = useCreateActivity();
+  const updateActivity = useUpdateActivity();
+  const deleteActivities = useDeleteActivities();
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const toggleComplete = async (task: Activity) => {
+  const toggleComplete = (task: Activity) => {
     const completed_at = task.completed_at ? null : new Date().toISOString();
-    await supabase.from("activities").update({ completed_at }).eq("id", task.id);
-    fetchData();
+    updateActivity.mutate({ id: task.id, activity: { completed_at } });
   };
 
-  const deleteTask = async (id: string) => {
-    await supabase.from("activities").delete().eq("id", id);
-    fetchData();
-    toast({ title: "Tarefa excluída" });
+  const deleteTask = (id: string) => {
+    deleteActivities.mutate([id], {
+      onSuccess: () => toast({ title: "Tarefa excluída" }),
+    });
   };
 
   const getContact = (id: string | null) => id ? contacts.find((c) => c.id === id) : null;
@@ -201,7 +205,7 @@ export default function Tasks() {
     setCreateOpen(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!orgId || !formTitle.trim()) return;
     const payload = {
       org_id: orgId,
@@ -215,14 +219,15 @@ export default function Tasks() {
     };
 
     if (editTask) {
-      await supabase.from("activities").update(payload).eq("id", editTask.id);
-      toast({ title: "Tarefa atualizada" });
+      updateActivity.mutate(
+        { id: editTask.id, activity: payload },
+        { onSuccess: () => { toast({ title: "Tarefa atualizada" }); setCreateOpen(false); } }
+      );
     } else {
-      await supabase.from("activities").insert(payload);
-      toast({ title: "Tarefa criada" });
+      createActivity.mutate(payload, {
+        onSuccess: () => { toast({ title: "Tarefa criada" }); setCreateOpen(false); },
+      });
     }
-    setCreateOpen(false);
-    fetchData();
   };
 
   if (!orgId) return <div className="py-20 text-center text-muted-foreground">Crie uma organização em Configurações primeiro.</div>;
@@ -300,102 +305,104 @@ export default function Tasks() {
       </div>
 
       {/* Table */}
-      <div className="rounded-md border border-border overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead className="w-10"></TableHead>
-              <TableHead className="min-w-[200px]">Tarefa</TableHead>
-              <TableHead>Negócio</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Data de venc.</TableHead>
-              <TableHead>Atribuído a</TableHead>
-              <TableHead className="w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((t) => {
-              const contact = getContact(t.contact_id);
-              const deal = getDeal(t.deal_id);
-              const member = getMember(t.user_id);
-              const overdue = isOverdue(t);
+      <div className="vx-table">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30">
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="min-w-[200px]">Tarefa</TableHead>
+                <TableHead>Negócio</TableHead>
+                <TableHead>Contato</TableHead>
+                <TableHead>Data de venc.</TableHead>
+                <TableHead>Atribuído a</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((t) => {
+                const contact = getContact(t.contact_id);
+                const deal = getDeal(t.deal_id);
+                const member = getMember(t.user_id);
+                const overdue = isOverdue(t);
 
-              return (
-                <TableRow
-                  key={t.id}
-                  className={`group ${t.completed_at ? "opacity-40" : ""} ${overdue ? "bg-destructive/[0.03]" : ""}`}
-                >
-                  <TableCell className="pr-0">
-                    <Checkbox
-                      checked={!!t.completed_at}
-                      onCheckedChange={() => toggleComplete(t)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <button onClick={() => openEdit(t)} className="text-left">
-                      <span className={`text-sm font-medium ${t.completed_at ? "line-through" : ""}`}>
-                        {t.title}
-                      </span>
-                      {t.body && <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">{t.body}</p>}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    {deal && (
-                      <Badge variant="secondary" className="text-[10px] font-normal max-w-[160px] truncate">
-                        {deal.title}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {contact && (
-                      <span className="text-sm">
-                        {contact.first_name} {contact.last_name || ""}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {t.due_date && (
-                      <span className={`text-xs flex items-center gap-1 ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {overdue && <AlertTriangle className="h-3 w-3" />}
-                        <Clock className="h-3 w-3" />
-                        {new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {member && (
-                      <span className="text-xs text-muted-foreground">{member.name || member.email}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground hover:bg-accent transition-all">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(t)}>
-                          <Edit2 className="mr-2 h-3.5 w-3.5" />Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteTask(t.id)} className="text-destructive">
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                return (
+                  <TableRow
+                    key={t.id}
+                    className={`group ${t.completed_at ? "opacity-40" : ""} ${overdue ? "bg-destructive/[0.03]" : ""}`}
+                  >
+                    <TableCell className="pr-0">
+                      <Checkbox
+                        checked={!!t.completed_at}
+                        onCheckedChange={() => toggleComplete(t)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <button onClick={() => openEdit(t)} className="text-left">
+                        <span className={`text-sm font-medium ${t.completed_at ? "line-through" : ""}`}>
+                          {t.title}
+                        </span>
+                        {t.body && <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">{t.body}</p>}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      {deal && (
+                        <Badge variant="secondary" className="text-[10px] font-normal max-w-[160px] truncate">
+                          {deal.title}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {contact && (
+                        <span className="text-sm">
+                          {contact.first_name} {contact.last_name || ""}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {t.due_date && (
+                        <span className={`text-xs flex items-center gap-1 ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                          {overdue && <AlertTriangle className="h-3 w-3" />}
+                          <Clock className="h-3 w-3" />
+                          {new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {member && (
+                        <span className="text-xs text-muted-foreground">{member.name || member.email}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="opacity-0 group-hover:opacity-100 rounded p-1 text-muted-foreground hover:bg-accent transition-all">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEdit(t)}>
+                            <Edit2 className="mr-2 h-3.5 w-3.5" />Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => deleteTask(t.id)} className="text-destructive">
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                    {dateFilter === "done" ? "Nenhuma tarefa concluída" : "Nenhuma tarefa pendente 🎉"}
                   </TableCell>
                 </TableRow>
-              );
-            })}
-            {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
-                  {dateFilter === "done" ? "Nenhuma tarefa concluída" : "Nenhuma tarefa pendente 🎉"}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Create/Edit dialog */}

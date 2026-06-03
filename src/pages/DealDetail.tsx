@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { DealQualification } from "@/components/crm/DealQualification";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,14 +21,12 @@ import {
   Phone, Mail, FileText, CheckSquare, CalendarDays, Edit2, Check, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useDeal, useUpdateDeal, useUpdateDealStatus, useUpdateDealStage } from "@/hooks/queries/useDeals";
+import { useDealActivities, useCreateActivity, activitiesKeys } from "@/hooks/queries/useActivities";
+import { usePipelineStages } from "@/hooks/queries/usePipelines";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Database } from "@/integrations/supabase/types";
 
-type Deal = Database["public"]["Tables"]["deals"]["Row"];
-type Stage = Database["public"]["Tables"]["pipeline_stages"]["Row"];
-type Contact = Database["public"]["Tables"]["contacts"]["Row"];
-type Company = Database["public"]["Tables"]["companies"]["Row"];
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-type Activity = Database["public"]["Tables"]["activities"]["Row"];
 type ActivityType = Database["public"]["Enums"]["activity_type"];
 
 function formatCurrency(value: number, currency: string = "BRL") {
@@ -49,14 +46,16 @@ export default function DealDetail() {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const [deal, setDeal] = useState<Deal | null>(null);
-  const [stages, setStages] = useState<Stage[]>([]);
-  const [contact, setContact] = useState<Contact | null>(null);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [owner, setOwner] = useState<Profile | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  const { data: deal, isLoading: dealLoading } = useDeal(id);
+  const { data: activities = [] } = useDealActivities(id);
+  const { data: stages = [] } = usePipelineStages();
+
+  const updateDeal = useUpdateDeal();
+  const updateDealStatus = useUpdateDealStatus();
+  const updateDealStage = useUpdateDealStage();
+  const createActivity = useCreateActivity();
 
   // Inline edit
   const [editingTitle, setEditingTitle] = useState(false);
@@ -73,47 +72,17 @@ export default function DealDetail() {
   // Add activity
   const [activityForm, setActivityForm] = useState({ type: "note" as ActivityType, title: "", body: "" });
 
-  const fetchDeal = useCallback(async () => {
-    if (!id) return;
-    const { data } = await supabase.from("deals").select("*").eq("id", id).single();
-    if (!data) { navigate("/deals"); return; }
-    setDeal(data);
-    setTitleDraft(data.title);
-    setValueDraft(String(data.value || 0));
-    setCurrencyDraft(data.currency || "BRL");
-
-    // Fetch related data
-    const [stagesRes, activitiesRes, membersRes] = await Promise.all([
-      supabase.from("pipeline_stages").select("*").eq("org_id", data.org_id).order("order"),
-      supabase.from("activities").select("*").eq("deal_id", id).order("created_at", { ascending: false }),
-      supabase.from("profiles").select("*").eq("org_id", data.org_id),
-    ]);
-    setStages(stagesRes.data || []);
-    setActivities(activitiesRes.data || []);
-    setMembers(membersRes.data || []);
-
-    if (data.contact_id) {
-      const { data: c } = await supabase.from("contacts").select("*").eq("id", data.contact_id).single();
-      setContact(c);
-    }
-    if (data.company_id) {
-      const { data: co } = await supabase.from("companies").select("*").eq("id", data.company_id).single();
-      setCompany(co);
-    }
-    if (data.owner_id) {
-      const { data: o } = await supabase.from("profiles").select("*").eq("id", data.owner_id).single();
-      setOwner(o);
-    }
-  }, [id, navigate]);
-
-  useEffect(() => { fetchDeal(); }, [fetchDeal]);
-
-  if (!deal) {
+  if (dealLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
+  }
+
+  if (!deal) {
+    navigate("/deals");
+    return null;
   }
 
   // Health indicator based on last activity
@@ -127,52 +96,83 @@ export default function DealDetail() {
   const currentStage = stages.find((s) => s.id === deal.stage_id);
   const currentStageIndex = stages.findIndex((s) => s.id === deal.stage_id);
 
-  const saveTitle = async () => {
+  const saveTitle = () => {
     if (!titleDraft.trim()) return;
-    await supabase.from("deals").update({ title: titleDraft }).eq("id", deal.id);
-    setDeal({ ...deal, title: titleDraft });
-    setEditingTitle(false);
-    toast({ title: "Título atualizado" });
+    updateDeal.mutate(
+      { id: deal.id, deal: { title: titleDraft } },
+      {
+        onSuccess: () => {
+          setEditingTitle(false);
+          toast({ title: "Título atualizado" });
+        },
+      }
+    );
   };
 
-  const saveValue = async () => {
+  const saveValue = () => {
     const val = Number(valueDraft) || 0;
-    await supabase.from("deals").update({ value: val, currency: currencyDraft }).eq("id", deal.id);
-    setDeal({ ...deal, value: val, currency: currencyDraft });
-    setEditingValue(false);
-    toast({ title: "Valor atualizado" });
+    updateDeal.mutate(
+      { id: deal.id, deal: { value: val, currency: currencyDraft } },
+      {
+        onSuccess: () => {
+          setEditingValue(false);
+          toast({ title: "Valor atualizado" });
+        },
+      }
+    );
   };
 
-  const changeStage = async (stageId: string) => {
-    await supabase.from("deals").update({ stage_id: stageId }).eq("id", deal.id);
-    setDeal({ ...deal, stage_id: stageId });
-    toast({ title: "Estágio atualizado" });
+  const changeStage = (stageId: string) => {
+    updateDealStage.mutate(
+      { id: deal.id, stageId },
+      { onSuccess: () => toast({ title: "Estágio atualizado" }) }
+    );
   };
 
-  const markAsWon = async () => {
-    await supabase.from("deals").update({ status: "won" }).eq("id", deal.id);
-    setDeal({ ...deal, status: "won" });
-    toast({ title: "Negócio marcado como ganho! 🎉" });
+  const markAsWon = () => {
+    updateDealStatus.mutate(
+      { id: deal.id, status: "won" },
+      { onSuccess: () => toast({ title: "Negócio marcado como ganho! 🎉" }) }
+    );
   };
 
-  const confirmLoss = async () => {
+  const confirmLoss = () => {
     const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
-    await supabase.from("deals").update({ status: "lost", loss_reason: reason }).eq("id", deal.id);
-    setDeal({ ...deal, status: "lost" });
-    setLossModalOpen(false);
-    toast({ title: "Negócio marcado como perdido" });
+    updateDealStatus.mutate(
+      { id: deal.id, status: "lost", lossReason: reason },
+      {
+        onSuccess: () => {
+          setLossModalOpen(false);
+          toast({ title: "Negócio marcado como perdido" });
+        },
+      }
+    );
   };
 
-  const addActivity = async () => {
+  const addActivity = () => {
     if (!orgId || !activityForm.title) return;
-    await supabase.from("activities").insert({
-      org_id: orgId, deal_id: deal.id, type: activityForm.type,
-      title: activityForm.title, body: activityForm.body, user_id: user?.id,
-    });
-    setActivityForm({ type: "note", title: "", body: "" });
-    fetchDeal();
-    toast({ title: "Atividade adicionada" });
+    createActivity.mutate(
+      {
+        org_id: orgId,
+        deal_id: deal.id,
+        type: activityForm.type,
+        title: activityForm.title,
+        body: activityForm.body,
+        user_id: user?.id,
+      },
+      {
+        onSuccess: () => {
+          setActivityForm({ type: "note", title: "", body: "" });
+          qc.invalidateQueries({ queryKey: activitiesKeys.byDeal(deal.id) });
+          toast({ title: "Atividade adicionada" });
+        },
+      }
+    );
   };
+
+  const contact = deal.contact ?? null;
+  const company = deal.company ?? null;
+  const owner = deal.owner ?? null;
 
   return (
     <div className="space-y-6">
@@ -193,7 +193,7 @@ export default function DealDetail() {
                 <button onClick={() => { setEditingTitle(false); setTitleDraft(deal.title); }} className="text-muted-foreground"><X className="h-5 w-5" /></button>
               </div>
             ) : (
-              <h1 className="text-2xl font-bold tracking-tight group cursor-pointer" onClick={() => setEditingTitle(true)}>
+              <h1 className="text-2xl font-bold tracking-tight group cursor-pointer" onClick={() => { setTitleDraft(deal.title); setEditingTitle(true); }}>
                 {deal.title}
                 <Edit2 className="ml-2 inline h-4 w-4 opacity-0 group-hover:opacity-50 transition-opacity" />
               </h1>
@@ -217,7 +217,7 @@ export default function DealDetail() {
                 <button onClick={() => setEditingValue(false)} className="text-muted-foreground"><X className="h-4 w-4" /></button>
               </div>
             ) : (
-              <span className="text-xl font-bold text-primary cursor-pointer hover:opacity-80" onClick={() => setEditingValue(true)}>
+              <span className="text-xl font-bold text-primary cursor-pointer hover:opacity-80" onClick={() => { setValueDraft(String(deal.value || 0)); setCurrencyDraft(deal.currency || "BRL"); setEditingValue(true); }}>
                 {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
               </span>
             )}
@@ -341,7 +341,7 @@ export default function DealDetail() {
             dealId={deal.id}
             qualification={(deal as any).qualification}
             qualificationScore={(deal as any).qualification_score || 0}
-            onUpdate={fetchDeal}
+            onUpdate={() => qc.invalidateQueries({ queryKey: ["deals", "detail", deal.id] })}
           />
           {/* Contact */}
           <Card>

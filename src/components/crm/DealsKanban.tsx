@@ -6,7 +6,7 @@ import {
   PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   useDraggable, useDroppable,
 } from "@dnd-kit/core";
-import type { DealWithRelations } from "@/pages/Deals";
+import type { DealWithRelations } from "@/lib/api/deals";
 import type { Database } from "@/integrations/supabase/types";
 
 
@@ -20,65 +20,59 @@ function formatCurrency(value: number, currency: string = "BRL") {
 
 function DealCard({
   deal,
+  stageColor,
   onClick,
 }: {
   deal: DealWithRelations;
+  stageColor?: string;
   onClick: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: deal.id });
   const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 }
-    : undefined;
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, borderLeftColor: stageColor || "hsl(var(--primary))" }
+    : { borderLeftColor: stageColor || "hsl(var(--primary))" };
 
-  // Build subtitle: company, contact names
   const subtitleParts: string[] = [];
   if (deal.company) subtitleParts.push(deal.company.name);
   if (deal.contact) subtitleParts.push(`${deal.contact.first_name} ${deal.contact.last_name || ""}`.trim());
-  const subtitle = subtitleParts.join(", ");
+  const subtitle = subtitleParts.join(" · ");
+  const probability = Number(deal.probability) || 0;
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="group"
-    >
-      <div
-        className="cursor-pointer rounded-md border border-border bg-card p-2.5 transition-all hover:shadow-md active:cursor-grabbing"
-        onClick={onClick}
-      >
-        {/* Title */}
-        <p className="truncate text-[13px] font-medium leading-snug text-foreground">
-          {deal.title}
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="vx-deal-card" onClick={onClick}>
+      {/* Title */}
+      <p className="truncate text-[13px] font-semibold leading-snug text-foreground mb-0.5">
+        {deal.title}
+      </p>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <p className="truncate text-[11px] text-muted-foreground leading-tight mb-2">
+          {subtitle}
         </p>
+      )}
 
-        {/* Subtitle: company, contact */}
-        {subtitle && (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground leading-tight">
-            {subtitle}
-          </p>
-        )}
+      {/* Bottom row */}
+      <div className="flex items-center justify-between gap-1">
+        <span className="num text-[12px] font-bold text-foreground tabular-nums">
+          {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
+        </span>
 
-        {/* Bottom row: value + indicators */}
-        <div className="mt-1.5 flex items-center justify-between">
-          <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
-            <svg className="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-            {formatCurrency(Number(deal.value) || 0, deal.currency || "BRL")}
-          </span>
-
-          <div className="flex items-center gap-1.5">
-            {deal.owner && (
-              <Avatar className="h-5 w-5">
-                <AvatarImage src={deal.owner.avatar_url || ""} />
-                <AvatarFallback className="bg-primary/10 text-primary text-[8px]">
-                  {deal.owner.name?.charAt(0)?.toUpperCase() || "?"}
-                </AvatarFallback>
-              </Avatar>
-            )}
-          </div>
+        <div className="flex items-center gap-1.5">
+          {probability > 0 && (
+            <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none
+              ${probability >= 70 ? "bg-success/12 text-success" : probability >= 40 ? "bg-warning/12 text-warning" : "bg-muted text-muted-foreground"}`}>
+              {probability}%
+            </span>
+          )}
+          {deal.owner && (
+            <Avatar className="h-5 w-5 ring-1 ring-border">
+              <AvatarImage src={deal.owner.avatar_url || ""} />
+              <AvatarFallback className="bg-primary/10 text-primary text-[8px] font-bold">
+                {deal.owner.name?.charAt(0)?.toUpperCase() || "?"}
+              </AvatarFallback>
+            </Avatar>
+          )}
         </div>
       </div>
     </div>
@@ -133,6 +127,7 @@ function StageColumn({
           <DealCard
             key={deal.id}
             deal={deal}
+            stageColor={stage.color || undefined}
             onClick={() => onDealClick(deal)}
           />
         ))}

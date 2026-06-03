@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEmails, useInboxContacts, useUpdateEmail, useDeleteEmail, useBatchUpdateEmails, emailsKeys } from "@/hooks/queries/useEmails";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,51 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { EmailComposeModal } from "@/components/crm/EmailComposeModal";
 import { cn } from "@/lib/utils";
 import DOMPurify from "dompurify";
-
-type Email = {
-  id: string;
-  org_id: string;
-  user_id: string | null;
-  contact_id: string | null;
-  deal_id: string | null;
-  company_id: string | null;
-  direction: string;
-  subject: string | null;
-  body_html: string | null;
-  from_email: string | null;
-  to_emails: string[];
-  cc_emails: string[];
-  bcc_emails: string[];
-  status: string;
-  open_count: number;
-  click_count: number;
-  last_opened_at: string | null;
-  last_clicked_at: string | null;
-  thread_id: string | null;
-  message_id: string | null;
-  provider: string | null;
-  is_read: boolean;
-  snoozed_until: string | null;
-  is_archived: boolean;
-  is_starred?: boolean;
-  is_spam?: boolean;
-  is_trashed?: boolean;
-  importance?: string | null;
-  sent_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-  attachments?: Array<{ filename: string; mime_type: string; size: number; attachment_id: string }>;
-};
-
-type Contact = {
-  id: string;
-  first_name: string;
-  last_name: string | null;
-  email: string | null;
-  avatar_url: string | null;
-  status: string | null;
-  org_id: string;
-};
+import type { Email, InboxContact as Contact } from "@/lib/api/emails";
 
 type Folder =
   | "inbox"
@@ -97,9 +55,14 @@ export default function Inbox() {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const [emails, setEmails] = useState<Email[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const { data: emails = [] } = useEmails();
+  const { data: contacts = [] } = useInboxContacts();
+  const updateEmailMutation = useUpdateEmail();
+  const deleteEmailMutation = useDeleteEmail();
+  const batchUpdateMutation = useBatchUpdateEmails();
+
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<Folder>("inbox");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
@@ -110,18 +73,6 @@ export default function Inbox() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    if (!orgId) return;
-    const [eRes, cRes] = await Promise.all([
-      supabase.from("emails").select("*").eq("org_id", orgId).order("created_at", { ascending: false }).limit(500),
-      supabase.from("contacts").select("*").eq("org_id", orgId),
-    ]);
-    setEmails((eRes.data as Email[]) || []);
-    setContacts((cRes.data as Contact[]) || []);
-  }, [orgId]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
 
   const contactMap = useMemo(() => {
     const m = new Map<string, Contact>();

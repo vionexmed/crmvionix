@@ -1,4 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { captureException } from "../_shared/sentry.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("ai-copilot");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,7 +86,8 @@ ${context ? `CONTEXTO ATUAL DO USUÁRIO:\n${context}` : ""}`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("ai-copilot error:", e);
+    await captureException(e, { functionName: "ai-copilot" });
+    log.error("unhandled error", { message: e instanceof Error ? e.message : String(e) });
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

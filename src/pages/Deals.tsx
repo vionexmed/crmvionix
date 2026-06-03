@@ -1,8 +1,14 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { useDeals, useCreateDeal, useUpdateDeal, useUpdateDealStage, useUpdateDealStatus, useBatchUpdateDeals, dealsKeys } from "@/hooks/queries/useDeals";
+import { useContacts } from "@/hooks/queries/useContacts";
+import { useCompanies } from "@/hooks/queries/useCompanies";
+import { useMembers } from "@/hooks/queries/useMembers";
+import { usePipelines, usePipelineStages, useSavePipelineStages } from "@/hooks/queries/usePipelines";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,29 +22,19 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, List, TrendingUp, Plus, Filter, Settings2, Trash2, GripVertical, Loader2 } from "lucide-react";
+import { Kanban, List, TrendingUp, Plus, Filter, Settings2, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import { DealsKanban } from "@/components/crm/DealsKanban";
-
 import { DealsList } from "@/components/crm/DealsList";
 import { DealsForecast } from "@/components/crm/DealsForecast";
 import { DealsFilters, type DealFilters } from "@/components/crm/DealsFilters";
 import type { Database } from "@/integrations/supabase/types";
+import type { EditingStage } from "@/lib/api/pipelines";
+export type { DealWithRelations } from "@/lib/api/deals";
 
 type Deal = Database["public"]["Tables"]["deals"]["Row"];
-type Stage = Database["public"]["Tables"]["pipeline_stages"]["Row"];
-type Pipeline = Database["public"]["Tables"]["pipelines"]["Row"];
-type Contact = Database["public"]["Tables"]["contacts"]["Row"];
-type Company = Database["public"]["Tables"]["companies"]["Row"];
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type DealStatus = Database["public"]["Enums"]["deal_status"];
-
-export type DealWithRelations = Deal & {
-  contact?: Contact | null;
-  company?: Company | null;
-  owner?: Profile | null;
-};
-
 type ViewMode = "kanban" | "list" | "forecast";
 
 export default function Deals() {
@@ -46,23 +42,52 @@ export default function Deals() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const [deals, setDeals] = useState<DealWithRelations[]>([]);
-  const [stages, setStages] = useState<Stage[]>([]);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
-  const [selectedPipeline, setSelectedPipeline] = useState<string>("");
+  // Declare view state FIRST — used in conditional query params below
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
+  const [selectedPipeline, setSelectedPipeline] = useState<string>("");
+  const [listPage, setListPage] = useState(0);
+
+  // Supporting data
+  const { data: allStages = [] } = usePipelineStages();
+  const { data: pipelines = [] } = usePipelines();
+  const { data: contacts = [] } = useContacts();
+  const { data: companies = [] } = useCompanies();
+  const { data: members = [] } = useMembers();
+
+  // Kanban + Forecast: all deals (no pagination needed)
+  const { data: allDealsResult = { data: [], count: 0 } } = useDeals();
+  // List: server-side paginated
+  const { data: listDealsResult = { data: [], count: 0 }, isFetching: listFetching } = useDeals(
+    viewMode === "list" ? { page: listPage, pageSize: DEFAULT_PAGE_SIZE } : {}
+  );
+
+  const listTotalPages = Math.ceil((listDealsResult.count) / DEFAULT_PAGE_SIZE);
+
+  const { mutateAsync: createDeal } = useCreateDeal();
+  const { mutateAsync: updateDeal } = useUpdateDeal();
+  const { mutateAsync: updateStage } = useUpdateDealStage();
+  const { mutateAsync: updateStatus } = useUpdateDealStatus();
+  const { mutateAsync: batchUpdate } = useBatchUpdateDeals();
+  const { mutateAsync: savePipelineStages, isPending: savingPipeline } = useSavePipelineStages();
+
+  // Enrich deals with owner profile (client-side join)
+  const allDeals = useMemo(
+    () => allDealsResult.data.map((d) => ({ ...d, owner: members.find((m) => m.id === d.owner_id) ?? null })),
+    [allDealsResult.data, members]
+  );
+  const listDeals = useMemo(
+    () => listDealsResult.data.map((d) => ({ ...d, owner: members.find((m) => m.id === d.owner_id) ?? null })),
+    [listDealsResult.data, members]
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const shouldOpenNew = searchParams.get("action") === "new";
   const [form, setForm] = useState<Partial<Deal>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<DealFilters>({});
   const [presetStageId, setPresetStageId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Loss reason modal
   const [lossModalOpen, setLossModalOpen] = useState(false);
@@ -75,125 +100,69 @@ export default function Deals() {
 
   // Pipeline customization
   const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false);
-  const [editingStages, setEditingStages] = useState<{ id?: string; name: string; color: string; win_probability: number; order: number }[]>([]);
-  const [savingPipeline, setSavingPipeline] = useState(false);
+  const [editingStages, setEditingStages] = useState<EditingStage[]>([]);
+
+  // Initialize selectedPipeline once pipelines load
+  useEffect(() => {
+    if (pipelines.length && !selectedPipeline) {
+      const def = pipelines.find((p) => p.is_default) || pipelines[0];
+      setSelectedPipeline(def.id);
+    }
+  }, [pipelines, selectedPipeline]);
+
+  // Realtime subscription — invalidate cache on remote changes
+  useEffect(() => {
+    if (!orgId) return;
+    const channel = supabase
+      .channel("deals-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "deals", filter: `org_id=eq.${orgId}` }, () => {
+        qc.invalidateQueries({ queryKey: dealsKeys.all(orgId) });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [orgId, qc]);
+
+  // Open "new deal" sheet from URL param
+  const pipelineStages = allStages.filter((s) => s.pipeline_id === selectedPipeline);
+  const shouldOpenNew = searchParams.get("action") === "new";
+  useEffect(() => {
+    if (shouldOpenNew && pipelineStages.length > 0) {
+      openNew();
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [shouldOpenNew, pipelineStages]);
 
   const openPipelineEditor = () => {
-    const current = stages
-      .filter((s) => s.pipeline_id === selectedPipeline)
+    const current = pipelineStages
       .sort((a, b) => a.order - b.order)
       .map((s) => ({ id: s.id, name: s.name, color: s.color || "#94a3b8", win_probability: Number(s.win_probability) || 0, order: s.order }));
     setEditingStages(current.length > 0 ? current : [{ name: "", color: "#94a3b8", win_probability: 50, order: 0 }]);
     setPipelineDialogOpen(true);
   };
 
-  const addEditStage = () => {
-    setEditingStages([...editingStages, { name: "", color: "#94a3b8", win_probability: 50, order: editingStages.length }]);
-  };
-
-  const removeEditStage = (idx: number) => {
-    setEditingStages(editingStages.filter((_, i) => i !== idx));
-  };
-
-  const updateEditStage = (idx: number, field: string, value: any) => {
-    setEditingStages(editingStages.map((s, i) => i === idx ? { ...s, [field]: value } : s));
-  };
-
-  const savePipelineStages = async () => {
+  const handleSavePipeline = async () => {
     if (!orgId || !selectedPipeline) return;
-    setSavingPipeline(true);
-
-    // Delete removed stages
-    const existingIds = editingStages.filter((s) => s.id).map((s) => s.id!);
-    const currentStageIds = stages.filter((s) => s.pipeline_id === selectedPipeline).map((s) => s.id);
-    const toDelete = currentStageIds.filter((id) => !existingIds.includes(id));
-    if (toDelete.length > 0) {
-      await Promise.all(toDelete.map((id) => supabase.from("pipeline_stages").delete().eq("id", id)));
-    }
-
-    // Upsert stages
-    for (let i = 0; i < editingStages.length; i++) {
-      const s = editingStages[i];
-      const payload = { name: s.name, color: s.color, win_probability: s.win_probability, order: i, pipeline_id: selectedPipeline, org_id: orgId };
-      if (s.id) {
-        await supabase.from("pipeline_stages").update(payload).eq("id", s.id);
-      } else {
-        await supabase.from("pipeline_stages").insert(payload);
-      }
-    }
-
-    setSavingPipeline(false);
+    const currentStageIds = pipelineStages.map((s) => s.id);
+    await savePipelineStages({ pipelineId: selectedPipeline, currentStageIds, editingStages });
     setPipelineDialogOpen(false);
     toast({ title: "Pipeline atualizado!" });
-    fetchData();
   };
 
-  const fetchData = useCallback(async () => {
-    if (!orgId) return;
-    const [pRes, sRes, dRes, cRes, coRes, mRes] = await Promise.all([
-      supabase.from("pipelines").select("*").eq("org_id", orgId).order("is_default", { ascending: false }).order("created_at", { ascending: false }),
-      supabase.from("pipeline_stages").select("*").eq("org_id", orgId).order("order"),
-      supabase.from("deals").select("*, contact:contacts!deals_contact_id_fkey(*), company:companies!deals_company_id_fkey(*)").eq("org_id", orgId),
-      supabase.from("contacts").select("*").eq("org_id", orgId),
-      supabase.from("companies").select("*").eq("org_id", orgId),
-      supabase.from("profiles").select("*").eq("org_id", orgId),
-    ]);
-    setPipelines(pRes.data || []);
-    setStages(sRes.data || []);
-    // Enrich deals with owner profile
-    const allMembers = mRes.data || [];
-    const enrichedDeals: DealWithRelations[] = (dRes.data || []).map((d: any) => ({
-      ...d,
-      contact: d.contact || null,
-      company: d.company || null,
-      owner: allMembers.find((m) => m.id === d.owner_id) || null,
-    }));
-    setDeals(enrichedDeals);
-    setContacts(cRes.data || []);
-    setCompanies(coRes.data || []);
-    setMembers(allMembers);
-    if (pRes.data?.length && !selectedPipeline) {
-      const def = pRes.data.find((p) => p.is_default) || pRes.data[0];
-      setSelectedPipeline(def.id);
-    }
-  }, [orgId, selectedPipeline]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Realtime subscription for deals
-  useEffect(() => {
-    if (!orgId) return;
-    const channel = supabase
-      .channel('deals-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'deals', filter: `org_id=eq.${orgId}` },
-        () => { fetchData(); }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [orgId, fetchData]);
-
-  const pipelineStages = stages.filter((s) => s.pipeline_id === selectedPipeline);
-
-  // Apply filters
-  const filteredDeals = deals.filter((d) => {
+  // Apply client-side filters to all deals (Kanban/Forecast)
+  const filteredAllDeals = allDeals.filter((d) => {
     if (filters.ownerId && d.owner_id !== filters.ownerId) return false;
     if (filters.minValue && (Number(d.value) || 0) < filters.minValue) return false;
     if (filters.maxValue && (Number(d.value) || 0) > filters.maxValue) return false;
     if (filters.closeDateFrom && d.close_date && d.close_date < filters.closeDateFrom) return false;
     if (filters.closeDateTo && d.close_date && d.close_date > filters.closeDateTo) return false;
-    // For kanban, filter to current pipeline stages
-    if (viewMode === "kanban") {
-      const stageIds = pipelineStages.map((s) => s.id);
-      if (d.stage_id && !stageIds.includes(d.stage_id) && d.status === "open") return false;
-    }
+    const stageIds = pipelineStages.map((s) => s.id);
+    if (d.stage_id && !stageIds.includes(d.stage_id) && d.status === "open") return false;
     return true;
   });
 
   const handleDragEnd = async (dealId: string, newStageId: string) => {
-    setDeals((prev) => prev.map((d) => d.id === dealId ? { ...d, stage_id: newStageId } : d));
-    await supabase.from("deals").update({ stage_id: newStageId }).eq("id", dealId);
+    await updateStage({ id: dealId, stageId: newStageId });
   };
 
   const openNew = (stageId?: string) => {
@@ -207,14 +176,6 @@ export default function Deals() {
     setSheetOpen(true);
   };
 
-  useEffect(() => {
-    if (shouldOpenNew && pipelineStages.length > 0) {
-      openNew();
-      searchParams.delete("action");
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, [shouldOpenNew, pipelineStages]);
-
   const openEdit = (deal: Deal) => {
     setEditing(deal);
     setPresetStageId(null);
@@ -225,31 +186,30 @@ export default function Deals() {
   const handleSave = async () => {
     if (!orgId || !form.title) return;
     if (editing) {
-      const { error } = await supabase.from("deals").update({
-        title: form.title, value: Number(form.value) || 0, currency: form.currency,
-        stage_id: form.stage_id, probability: Number(form.probability) || 0,
-        close_date: form.close_date, contact_id: form.contact_id || null,
-        company_id: form.company_id || null, owner_id: form.owner_id || null,
-      }).eq("id", editing.id);
-      if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+      await updateDeal({
+        id: editing.id,
+        deal: {
+          title: form.title, value: Number(form.value) || 0, currency: form.currency,
+          stage_id: form.stage_id, probability: Number(form.probability) || 0,
+          close_date: form.close_date, contact_id: form.contact_id || null,
+          company_id: form.company_id || null, owner_id: form.owner_id || null,
+        },
+      });
     } else {
-      const { error } = await supabase.from("deals").insert({
+      await createDeal({
         org_id: orgId, title: form.title!, value: Number(form.value) || 0,
         currency: form.currency || "BRL", stage_id: form.stage_id,
         probability: Number(form.probability) || 0, close_date: form.close_date,
         status: "open", owner_id: form.owner_id || user?.id,
         contact_id: form.contact_id || null, company_id: form.company_id || null,
       });
-      if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     }
     setSheetOpen(false);
-    fetchData();
     toast({ title: editing ? "Negócio atualizado" : "Negócio criado" });
   };
 
   const markAsWon = async (dealId: string) => {
-    await supabase.from("deals").update({ status: "won" }).eq("id", dealId);
-    fetchData();
+    await updateStatus({ id: dealId, status: "won" });
     toast({ title: "Negócio marcado como ganho! 🎉" });
   };
 
@@ -263,44 +223,33 @@ export default function Deals() {
   const confirmLoss = async () => {
     if (!lossDealId) return;
     const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
-    await supabase.from("deals").update({ status: "lost", loss_reason: reason }).eq("id", lossDealId);
+    await updateStatus({ id: lossDealId, status: "lost", lossReason: reason });
     setLossModalOpen(false);
-    fetchData();
     toast({ title: "Negócio marcado como perdido" });
   };
 
   const handleBatchAction = async (action: "won" | "lost" | "delete") => {
     const ids = Array.from(selectedDeals);
-    if (action === "delete") {
-      await Promise.all(ids.map((id) => supabase.from("deals").delete().eq("id", id)));
-      toast({ title: `${ids.length} negócios excluídos` });
-    } else if (action === "won") {
-      await Promise.all(ids.map((id) => supabase.from("deals").update({ status: "won" }).eq("id", id)));
-      toast({ title: `${ids.length} negócios marcados como ganhos` });
-    } else {
-      await Promise.all(ids.map((id) => supabase.from("deals").update({ status: "lost" }).eq("id", id)));
-      toast({ title: `${ids.length} negócios marcados como perdidos` });
-    }
+    await batchUpdate({ ids, action });
     setSelectedDeals(new Set());
-    fetchData();
+    const messages = { won: "ganhos", lost: "perdidos", delete: "excluídos" };
+    toast({ title: `${ids.length} negócios ${messages[action]}` });
   };
 
   if (!orgId) {
     return <div className="py-20 text-center text-muted-foreground">Crie uma organização em Configurações primeiro.</div>;
   }
 
-  const openDeals = filteredDeals.filter((d) => d.status === "open");
-  const wonDeals = filteredDeals.filter((d) => d.status === "won");
-  const lostDeals = filteredDeals.filter((d) => d.status === "lost");
+  const openDeals = filteredAllDeals.filter((d) => d.status === "open");
+  const wonDeals  = filteredAllDeals.filter((d) => d.status === "won");
+  const lostDeals = filteredAllDeals.filter((d) => d.status === "lost");
+  const totalCount = viewMode === "list" ? listDealsResult.count : filteredAllDeals.length;
 
   return (
     <div className="space-y-3">
-      {/* Header — Pipedrive-inspired */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-lg sm:text-xl font-bold tracking-tight">Negócios</h1>
-
-          {/* View mode toggle */}
           <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
             {[
               { mode: "kanban" as const, icon: Kanban, label: "Kanban" },
@@ -319,7 +268,6 @@ export default function Deals() {
               </button>
             ))}
           </div>
-
           <Button onClick={() => openNew()} size="sm" className="gap-1">
             <Plus className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Negócio</span>
@@ -328,24 +276,20 @@ export default function Deals() {
 
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">
-            {filteredDeals.length} {filteredDeals.length === 1 ? "negócio" : "negócios"}
+            {totalCount} {totalCount === 1 ? "negócio" : "negócios"}
+            {viewMode === "list" && listFetching && <Loader2 className="inline ml-1.5 h-3 w-3 animate-spin" />}
           </span>
-
           {pipelines.length > 0 && (
             <Select value={selectedPipeline} onValueChange={setSelectedPipeline}>
-              <SelectTrigger className="h-8 w-40 text-xs border-border">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-8 w-40 text-xs border-border"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
-
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={openPipelineEditor} aria-label="Personalizar pipeline">
             <Settings2 className="h-3.5 w-3.5" />
           </Button>
-
           <Button variant="outline" size="sm" className="h-8" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3 w-3" /><span className="hidden sm:inline">Filtro</span>
           </Button>
@@ -371,14 +315,31 @@ export default function Deals() {
       )}
 
       {viewMode === "list" && (
-        <DealsList
-          deals={filteredDeals}
-          stages={stages}
-          selectedDeals={selectedDeals}
-          onSelectionChange={setSelectedDeals}
-          onDealClick={(d) => navigate(`/deals/${d.id}`)}
-          onBatchAction={handleBatchAction}
-        />
+        <>
+          <DealsList
+            deals={listDeals}
+            stages={allStages}
+            selectedDeals={selectedDeals}
+            onSelectionChange={setSelectedDeals}
+            onDealClick={(d) => navigate(`/deals/${d.id}`)}
+            onBatchAction={handleBatchAction}
+          />
+          {listTotalPages > 1 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                Página {listPage + 1} de {listTotalPages} · {listDealsResult.count} negócios
+              </span>
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" disabled={listPage === 0} onClick={() => setListPage(listPage - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" disabled={listPage >= listTotalPages - 1} onClick={() => setListPage(listPage + 1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {viewMode === "forecast" && (
@@ -516,13 +477,13 @@ export default function Deals() {
                 <input
                   type="color"
                   value={stage.color}
-                  onChange={(e) => updateEditStage(idx, "color", e.target.value)}
+                  onChange={(e) => setEditingStages(editingStages.map((s, i) => i === idx ? { ...s, color: e.target.value } : s))}
                   className="h-8 w-8 cursor-pointer rounded border-0 shrink-0"
                   aria-label={`Cor do estágio ${idx + 1}`}
                 />
                 <Input
                   value={stage.name}
-                  onChange={(e) => updateEditStage(idx, "name", e.target.value)}
+                  onChange={(e) => setEditingStages(editingStages.map((s, i) => i === idx ? { ...s, name: e.target.value } : s))}
                   placeholder={`Estágio ${idx + 1}`}
                   className="flex-1"
                 />
@@ -530,25 +491,27 @@ export default function Deals() {
                   <Input
                     type="number" min={0} max={100}
                     value={stage.win_probability}
-                    onChange={(e) => updateEditStage(idx, "win_probability", Number(e.target.value))}
+                    onChange={(e) => setEditingStages(editingStages.map((s, i) => i === idx ? { ...s, win_probability: Number(e.target.value) } : s))}
                     className="w-16 text-xs text-center"
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
                 {editingStages.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeEditStage(idx)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+                    onClick={() => setEditingStages(editingStages.filter((_, i) => i !== idx))}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={addEditStage}>
+            <Button variant="outline" size="sm"
+              onClick={() => setEditingStages([...editingStages, { name: "", color: "#94a3b8", win_probability: 50, order: editingStages.length }])}>
               <Plus className="mr-1 h-3.5 w-3.5" />Adicionar estágio
             </Button>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPipelineDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={savePipelineStages} disabled={savingPipeline || editingStages.some((s) => !s.name.trim())}>
+            <Button onClick={handleSavePipeline} disabled={savingPipeline || editingStages.some((s) => !s.name.trim())}>
               {savingPipeline && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar
             </Button>

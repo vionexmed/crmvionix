@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Activity as ActivityIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -29,6 +28,14 @@ import {
   ChevronLeft, ChevronRight, Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useActivities, useCreateActivity, useUpdateActivity, useDeleteActivities, activitiesKeys,
+} from "@/hooks/queries/useActivities";
+import { useMembers } from "@/hooks/queries/useMembers";
+import { useContacts } from "@/hooks/queries/useContacts";
+import { useCompanies } from "@/hooks/queries/useCompanies";
+import { useDeals } from "@/hooks/queries/useDeals";
 import type { Database } from "@/integrations/supabase/types";
 
 type Activity = Database["public"]["Tables"]["activities"]["Row"];
@@ -82,12 +89,19 @@ export default function Activities() {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  const { data: activities = [] } = useActivities();
+  const { data: contactsResult } = useContacts({ pageSize: 1000 });
+  const contacts: Contact[] = contactsResult?.data ?? [];
+  const { data: companies = [] } = useCompanies();
+  const { data: dealsResult } = useDeals({ pageSize: 1000 });
+  const deals: Deal[] = (dealsResult?.data ?? []) as unknown as Deal[];
+  const { data: members = [] } = useMembers();
+
+  const updateActivity = useUpdateActivity();
+  const deleteActivities = useDeleteActivities();
+
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("todo");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
@@ -111,40 +125,21 @@ export default function Activities() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  const fetchData = useCallback(async () => {
-    if (!orgId) return;
-    const [aRes, cRes, coRes, dRes, mRes] = await Promise.all([
-      supabase.from("activities").select("*").eq("org_id", orgId).order("due_date", { ascending: true, nullsFirst: false }),
-      supabase.from("contacts").select("*").eq("org_id", orgId),
-      supabase.from("companies").select("*").eq("org_id", orgId),
-      supabase.from("deals").select("*").eq("org_id", orgId),
-      supabase.from("profiles").select("*").eq("org_id", orgId),
-    ]);
-    setActivities(aRes.data || []);
-    setContacts(cRes.data || []);
-    setCompanies(coRes.data || []);
-    setDeals(dRes.data || []);
-    setMembers(mRes.data || []);
-  }, [orgId]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const toggleComplete = async (activity: Activity) => {
+  const toggleComplete = (activity: Activity) => {
     const completed_at = activity.completed_at ? null : new Date().toISOString();
-    await supabase.from("activities").update({ completed_at }).eq("id", activity.id);
-    fetchData();
+    updateActivity.mutate({ id: activity.id, activity: { completed_at } });
   };
 
-  const deleteActivity = async (id: string) => {
-    await supabase.from("activities").delete().eq("id", id);
-    fetchData();
-    toast({ title: "Atividade excluída" });
+  const deleteActivity = (id: string) => {
+    deleteActivities.mutate([id], {
+      onSuccess: () => toast({ title: "Atividade excluída" }),
+    });
   };
 
   const getContact = (id: string | null) => id ? contacts.find((c) => c.id === id) : null;
   const getCompany = (id: string | null) => id ? companies.find((c) => c.id === id) : null;
   const getDeal = (id: string | null) => id ? deals.find((d) => d.id === id) : null;
-  const getMember = (id: string | null) => id ? members.find((m) => m.id === id) : null;
+  const getMember = (id: string | null) => id ? (members as Profile[]).find((m) => m.id === id) : null;
 
   const isOverdue = (a: Activity) => !a.completed_at && a.due_date && new Date(a.due_date) < new Date();
 
@@ -322,7 +317,7 @@ export default function Activities() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {members.map((m) => (
+              {(members as Profile[]).map((m) => (
                 <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>
               ))}
             </SelectContent>
@@ -542,8 +537,7 @@ export default function Activities() {
         contacts={contacts}
         companies={companies}
         deals={deals}
-        members={members}
-        onSaved={fetchData}
+        members={members as Profile[]}
       />
     </div>
   );
@@ -558,14 +552,16 @@ interface ModalProps {
   companies: Company[];
   deals: Deal[];
   members: Profile[];
-  onSaved: () => void;
 }
 
-function ActivityCreateEditModal({ open, onOpenChange, activity, contacts, companies, deals, members, onSaved }: ModalProps) {
+function ActivityCreateEditModal({ open, onOpenChange, activity, contacts, companies, deals, members }: ModalProps) {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
   const isEdit = !!activity;
+
+  const createActivity = useCreateActivity();
+  const updateActivity = useUpdateActivity();
 
   const [type, setType] = useState<ActivityType>("task");
   const [title, setTitle] = useState("");
@@ -625,14 +621,26 @@ function ActivityCreateEditModal({ open, onOpenChange, activity, contacts, compa
       user_id: assignee !== "none" ? assignee : user?.id,
     };
 
-    const { error } = isEdit
-      ? await supabase.from("activities").update(payload).eq("id", activity!.id)
-      : await supabase.from("activities").insert(payload);
-
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
-    onOpenChange(false);
-    onSaved();
-    toast({ title: isEdit ? "Atividade atualizada" : "Atividade criada" });
+    if (isEdit) {
+      updateActivity.mutate(
+        { id: activity!.id, activity: payload },
+        {
+          onSuccess: () => {
+            onOpenChange(false);
+            toast({ title: "Atividade atualizada" });
+          },
+          onError: (err: Error) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+        }
+      );
+    } else {
+      createActivity.mutate(payload, {
+        onSuccess: () => {
+          onOpenChange(false);
+          toast({ title: "Atividade criada" });
+        },
+        onError: (err: Error) => toast({ title: "Erro", description: err.message, variant: "destructive" }),
+      });
+    }
   };
 
   const typeHints: Record<ActivityType, string> = {

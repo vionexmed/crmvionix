@@ -1,4 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { captureException } from "../_shared/sentry.ts";
+import { createLogger } from "../_shared/logger.ts";
+
+const log = createLogger("process-automation");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,6 +159,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
+    await captureException(err, { functionName: "process-automation" });
+    log.error("automation failed", { message: err?.message });
     const duration = Date.now() - start;
     return new Response(JSON.stringify({ error: err.message, duration_ms: duration }), {
       status: 500,

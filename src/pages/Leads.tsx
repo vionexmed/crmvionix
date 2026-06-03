@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
+import { useLeads } from "@/hooks/queries/useContacts";
+import { usePipelines } from "@/hooks/queries/usePipelines";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { contactsKeys } from "@/hooks/queries/useContacts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,8 +39,6 @@ type Lead = {
   companies: { name: string } | null;
 };
 
-type Pipeline = { id: string; name: string };
-
 const sourceLabel = (src: string) => {
   const map: Record<string, string> = {
     site_vionex: "Site Vionex",
@@ -51,109 +53,110 @@ export default function Leads() {
   const { orgId } = useOrg();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const { data: leads = [], isLoading: loading, refetch } = useLeads();
+  const { data: pipelines = [] } = usePipelines();
 
   const [viewing, setViewing] = useState<Lead | null>(null);
   const [qualifying, setQualifying] = useState<Lead | null>(null);
   const [selectedPipeline, setSelectedPipeline] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const fetchLeads = useCallback(async () => {
-    if (!orgId) return;
-    setLoading(true);
-    const { data } = await supabase
-      .from("contacts")
-      .select("id, first_name, last_name, phone, created_at, metadata, companies(name)")
-      .eq("org_id", orgId)
-      .eq("status", "lead")
-      .order("created_at", { ascending: false }) as any;
-    setLeads(data || []);
-    setLoading(false);
-  }, [orgId]);
-
-  const fetchPipelines = useCallback(async () => {
-    if (!orgId) return;
-    const { data } = await supabase
-      .from("pipelines")
-      .select("id, name")
-      .eq("org_id", orgId) as any;
-    setPipelines(data || []);
-    if (data?.length) setSelectedPipeline(data[0].id);
-  }, [orgId]);
 
   useEffect(() => {
-    fetchLeads();
-    fetchPipelines();
-  }, [fetchLeads, fetchPipelines]);
+    if (pipelines.length > 0 && !selectedPipeline) {
+      setSelectedPipeline(pipelines[0].id);
+    }
+  }, [pipelines, selectedPipeline]);
 
-  useEffect(() => {
-    if (!orgId) return;
-    const channel = supabase
-      .channel("leads-realtime")
-      .on("postgres_changes", {
-        event: "*", schema: "public", table: "contacts",
-        filter: `org_id=eq.${orgId}`,
-      }, fetchLeads)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [orgId, fetchLeads]);
+  const leadsQueryKey = [...contactsKeys.all(orgId ?? ""), "leads"];
 
-  const deleteLead = async (id: string) => {
-    await supabase.from("contacts").delete().eq("id", id);
-    toast({ title: "Lead removido" });
-    if (viewing?.id === id) setViewing(null);
-    fetchLeads();
-  };
+  const deleteLeadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("contacts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, id) => {
+      toast({ title: "Lead removido" });
+      if (viewing?.id === id) setViewing(null);
+      qc.invalidateQueries({ queryKey: leadsQueryKey });
+    },
+    onError: (e: any) => {
+      toast({ title: "Erro ao remover lead", description: e.message, variant: "destructive" });
+    },
+  });
 
-  const disqualify = async (lead: Lead) => {
-    await supabase.from("contacts").update({ status: "churned" }).eq("id", lead.id);
-    toast({ title: "Lead desqualificado" });
-    setViewing(null);
-    fetchLeads();
-  };
+  const disqualifyMutation = useMutation({
+    mutationFn: async (lead: Lead) => {
+      const { error } = await supabase.from("contacts").update({ status: "churned" }).eq("id", lead.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Lead desqualificado" });
+      setViewing(null);
+      qc.invalidateQueries({ queryKey: leadsQueryKey });
+    },
+    onError: (e: any) => {
+      toast({ title: "Erro ao desqualificar", description: e.message, variant: "destructive" });
+    },
+  });
 
-  const openQualify = (lead: Lead) => {
-    setViewing(null);
-    setQualifying(lead);
-  };
+  const qualifyMutation = useMutation({
+    mutationFn: async ({ lead, pipelineId }: { lead: Lead; pipelineId: string }) => {
+      if (!orgId) throw new Error("No org");
 
-  const qualify = async () => {
-    if (!qualifying || !selectedPipeline || !orgId) return;
-    setSaving(true);
-    try {
-      await supabase.from("contacts").update({ status: "prospect" }).eq("id", qualifying.id);
+      const { error: updateError } = await supabase
+        .from("contacts")
+        .update({ status: "prospect" })
+        .eq("id", lead.id);
+      if (updateError) throw updateError;
 
-      const { data: stages } = await supabase
+      const { data: stages, error: stagesError } = await supabase
         .from("pipeline_stages")
         .select("id")
-        .eq("pipeline_id", selectedPipeline)
+        .eq("pipeline_id", pipelineId)
         .eq("org_id", orgId)
         .order("order", { ascending: true })
         .limit(1) as any;
+      if (stagesError) throw stagesError;
 
       const stageId = stages?.[0]?.id;
-      const fullName = [qualifying.first_name, qualifying.last_name].filter(Boolean).join(" ");
+      const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
 
-      await supabase.from("deals").insert({
+      const { error: dealError } = await supabase.from("deals").insert({
         org_id: orgId,
         title: `Lead: ${fullName}`,
-        contact_id: qualifying.id,
+        contact_id: lead.id,
         stage_id: stageId || null,
         value: 0,
         status: "open",
       });
-
+      if (dealError) throw dealError;
+    },
+    onSuccess: () => {
       toast({ title: "Lead qualificado!", description: "Movido para Contatos e negócio criado." });
       setQualifying(null);
-      fetchLeads();
+      qc.invalidateQueries({ queryKey: leadsQueryKey });
       navigate("/deals");
-    } catch (e: any) {
+    },
+    onError: (e: any) => {
       toast({ title: "Erro ao qualificar", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const deleteLead = (id: string) => deleteLeadMutation.mutate(id);
+  const disqualify = (lead: Lead) => disqualifyMutation.mutate(lead);
+
+  const openQualify = (lead: Lead) => {
+    setViewing(null);
+    setQualifying(lead);
+    if (!selectedPipeline && pipelines.length > 0) {
+      setSelectedPipeline(pipelines[0].id);
     }
-    setSaving(false);
+  };
+
+  const qualify = () => {
+    if (!qualifying || !selectedPipeline) return;
+    qualifyMutation.mutate({ lead: qualifying, pipelineId: selectedPipeline });
   };
 
   const fullName = (lead: Lead) =>
@@ -175,7 +178,7 @@ export default function Leads() {
         title="Leads"
         description={`${leads.length} lead${leads.length !== 1 ? "s" : ""} aguardando qualificação`}
         actions={
-          <Button variant="outline" size="sm" onClick={fetchLeads}>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             Atualizar
           </Button>
@@ -221,20 +224,20 @@ export default function Leads() {
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {lead.first_name.charAt(0).toUpperCase()}
                 </div>
-                <span className="font-medium truncate">{fullName(lead)}</span>
+                <span className="font-medium truncate">{fullName(lead as Lead)}</span>
               </div>
               <span className="text-muted-foreground font-mono text-xs">{lead.phone || "—"}</span>
-              <span className="text-muted-foreground truncate">{(lead.companies as any)?.name || meta(lead, "company") || "—"}</span>
-              <span className="text-muted-foreground text-xs truncate" title={meta(lead, "notes")}>{meta(lead, "notes") || "—"}</span>
-              <Badge variant="outline" className="text-[10px] font-medium w-fit">{sourceLabel(meta(lead, "source"))}</Badge>
+              <span className="text-muted-foreground truncate">{(lead.companies as any)?.name || meta(lead as Lead, "company") || "—"}</span>
+              <span className="text-muted-foreground text-xs truncate" title={meta(lead as Lead, "notes")}>{meta(lead as Lead, "notes") || "—"}</span>
+              <Badge variant="outline" className="text-[10px] font-medium w-fit">{sourceLabel(meta(lead as Lead, "source"))}</Badge>
               <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                 {formatDistanceToNow(new Date(lead.created_at), { locale: ptBR, addSuffix: true })}
               </span>
               <div className="flex items-center gap-1.5">
-                <Button size="icon" variant="outline" className="h-7 w-7" title="Ver detalhes" onClick={() => setViewing(lead)}>
+                <Button size="icon" variant="outline" className="h-7 w-7" title="Ver detalhes" onClick={() => setViewing(lead as Lead)}>
                   <Eye className="h-3.5 w-3.5" />
                 </Button>
-                <Button size="sm" variant="default" className="h-7 text-[11px] px-2.5" onClick={() => openQualify(lead)}>
+                <Button size="sm" variant="default" className="h-7 text-[11px] px-2.5" onClick={() => openQualify(lead as Lead)}>
                   <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                   Qualificar
                 </Button>
@@ -388,9 +391,9 @@ export default function Leads() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setQualifying(null)}>Cancelar</Button>
-            <Button onClick={qualify} disabled={saving || !selectedPipeline}>
+            <Button onClick={qualify} disabled={qualifyMutation.isPending || !selectedPipeline}>
               <Zap className="h-3.5 w-3.5 mr-1.5" />
-              {saving ? "Qualificando..." : "Qualificar e criar negócio"}
+              {qualifyMutation.isPending ? "Qualificando..." : "Qualificar e criar negócio"}
             </Button>
           </DialogFooter>
         </DialogContent>

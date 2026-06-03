@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import { captureException } from '../_shared/sentry.ts'
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
 
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (e) {
+    await captureException(e, { functionName: 'whatsapp-send' })
     console.error('whatsapp-send error', e)
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -7,7 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ArrowUpDown, Trophy, XCircle, Trash2, AlertTriangle } from "lucide-react";
-import type { DealWithRelations } from "@/pages/Deals";
+import type { DealWithRelations } from "@/lib/api/deals";
 import type { Database } from "@/integrations/supabase/types";
 
 type Stage = Database["public"]["Tables"]["pipeline_stages"]["Row"];

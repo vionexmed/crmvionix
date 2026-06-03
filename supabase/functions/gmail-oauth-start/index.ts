@@ -40,7 +40,7 @@ serve(async (req) => {
     }
     const userId = claims.claims.sub;
 
-    const { return_to } = await req.json().catch(() => ({}));
+    const { return_to, label, purpose } = await req.json().catch(() => ({}));
 
     // Derive org_id server-side from authenticated profile (never trust client)
     const supabaseAdmin = createClient(
@@ -76,7 +76,14 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const redirectUri = `${supabaseUrl}/functions/v1/gmail-oauth-callback`;
 
-    const state = btoa(JSON.stringify({ user_id: userId, org_id, return_to: return_to || "/settings/integrations", t: Date.now() }));
+    const state = btoa(JSON.stringify({
+      user_id: userId,
+      org_id,
+      return_to: return_to || "/settings/integrations",
+      label: label || "Principal",
+      purpose: purpose || "sales",
+      t: Date.now(),
+    }));
 
     const params = new URLSearchParams({
       client_id: clientId,

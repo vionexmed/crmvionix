@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Building2 as Building2Icon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -27,6 +27,9 @@ import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 import { CompanyCreateModal } from "@/components/crm/CompanyCreateModal";
 import { CSVImportModal } from "@/components/crm/CSVImportModal";
 import type { Database } from "@/integrations/supabase/types";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCompanies, useDeleteCompany, companiesKeys } from "@/hooks/queries/useCompanies";
+import { useMembers } from "@/hooks/queries/useMembers";
 
 type Company = Database["public"]["Tables"]["companies"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -46,9 +49,12 @@ export default function Companies() {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [members, setMembers] = useState<Profile[]>([]);
+  const { data: companies = [] } = useCompanies();
+  const { data: members = [] } = useMembers();
+  const deleteCompany = useDeleteCompany();
+
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
@@ -71,17 +77,21 @@ export default function Companies() {
     }
   }, [searchParams, setSearchParams]);
 
-  const fetchData = useCallback(async () => {
+  // Realtime subscription — invalidate React Query cache on remote changes
+  useEffect(() => {
     if (!orgId) return;
-    const [cRes, mRes] = await Promise.all([
-      supabase.from("companies").select("*").eq("org_id", orgId).order("created_at", { ascending: false }),
-      supabase.from("profiles").select("*").eq("org_id", orgId),
-    ]);
-    setCompanies(cRes.data || []);
-    setMembers(mRes.data || []);
-  }, [orgId]);
+    const channel = supabase
+      .channel(`companies:${orgId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "companies", filter: `org_id=eq.${orgId}` }, () => {
+        qc.invalidateQueries({ queryKey: companiesKeys.all(orgId) });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [orgId, qc]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const invalidate = () => {
+    if (orgId) qc.invalidateQueries({ queryKey: companiesKeys.all(orgId) });
+  };
 
   // Get unique industries for filter
   const industries = useMemo(() => {
@@ -135,9 +145,8 @@ export default function Companies() {
 
   const batchDelete = async () => {
     const ids = Array.from(selectedCompanies);
-    await Promise.all(ids.map((id) => supabase.from("companies").delete().eq("id", id)));
+    await Promise.all(ids.map((id) => deleteCompany.mutateAsync(id)));
     setSelectedCompanies(new Set());
-    fetchData();
     toast({ title: `${ids.length} empresas excluídas` });
   };
 
@@ -261,7 +270,8 @@ export default function Companies() {
       )}
 
       {viewMode === "table" && (
-        <div className="rounded-md border border-border overflow-x-auto">
+        <div className="vx-table">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -313,6 +323,7 @@ export default function Companies() {
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 
@@ -351,9 +362,9 @@ export default function Companies() {
         </div>
       )}
 
-      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompany(null)} onUpdate={fetchData} members={members} />
-      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchData} />
-      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={fetchData} entityType="companies" />
+      <CompanyDrawer company={drawerCompany} onClose={() => setDrawerCompany(null)} onUpdate={invalidate} members={members} />
+      <CompanyCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={invalidate} />
+      <CSVImportModal open={csvOpen} onOpenChange={setCsvOpen} onImported={invalidate} entityType="companies" />
     </div>
   );
 }

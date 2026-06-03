@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, User } from "lucide-react";
-import vionexLogo from "@/assets/vionex-logo.png";
+import vionexLogo from "@/assets/Captura_de_Tela_2026-06-03_às_10.38.57-removebg-preview.png";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";

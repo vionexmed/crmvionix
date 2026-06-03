@@ -1,0 +1,14 @@
+{
+  "id": "session-1780429163427",
+  "startedAt": "2026-06-02T19:39:23.427Z",
+  "cwd": "/Users/lucas/Downloads/crmvionix-main",
+  "context": {},
+  "metrics": {
+    "edits": 150,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-06-03T01:10:43.761Z",
+  "duration": 19880335
+}

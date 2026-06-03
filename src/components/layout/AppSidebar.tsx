@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, UserPlus, Building2, Activity, BarChart3,
   Settings, LogOut, CheckSquare, AlertTriangle, Inbox, FileText, Zap,
   Target, Plug, Shield, Handshake, MessageSquare, TrendingUp,
-  Megaphone, MousePointerClick, Search, Star,
+  Megaphone, Mail,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
@@ -33,19 +33,17 @@ const navGroups = [
   {
     label: "Atendimento",
     items: [
-      { title: "Conversas",      url: "/conversations",    icon: MessageSquare },
-      { title: "Caixa de Entrada", url: "/inbox",           icon: Inbox },
-      { title: "Templates",       url: "/email-templates",  icon: FileText },
-      { title: "Sequências",      url: "/email-sequences",  icon: Zap },
+      { title: "Conversas",        url: "/conversations",   icon: MessageSquare },
+      { title: "Email Atendimento", url: "/inbox",          icon: Inbox },
+      { title: "Templates",        url: "/email-templates", icon: FileText },
+      { title: "Sequências",       url: "/email-sequences", icon: Zap },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { title: "Visão Geral",      url: "/marketing/visao-geral",        icon: Megaphone },
-      { title: "Tráfego Pago",     url: "/marketing/trafego-pago",       icon: MousePointerClick },
-      { title: "Tráfego Orgânico", url: "/marketing/trafego-organico",   icon: Search },
-      { title: "Pontuação Leads",  url: "/marketing/pontuacao-leads",    icon: Star },
+      { title: "Visão Geral",     url: "/marketing/visao-geral", icon: Megaphone },
+      { title: "Email Marketing", url: "/marketing/inbox",       icon: Mail },
     ],
   },
   {

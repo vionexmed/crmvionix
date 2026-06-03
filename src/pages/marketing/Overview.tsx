@@ -179,7 +179,7 @@ function SourceBadge({ source: _source }: { source: MarketingSource }) {
 
 function TabBar({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void }) {
   return (
-    <div className="inline-flex p-1 rounded-lg bg-card" style={{ border: "0.5px solid hsl(var(--border))" }}>
+    <div className="inline-flex p-1 rounded-xl bg-muted/60" style={{ border: "1px solid hsl(var(--border))" }}>
       {(Object.keys(tabsConfig) as TabKey[]).map((k) => {
         const c = tabsConfig[k];
         const Icon = c.icon;
@@ -188,14 +188,14 @@ function TabBar({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void 
           <button
             key={k}
             onClick={() => onChange(k)}
-            className="relative inline-flex items-center gap-2 px-3.5 h-8 rounded-md text-[12px] font-medium transition-all duration-200"
+            className="relative inline-flex items-center gap-2 px-4 h-9 rounded-lg text-[12px] font-semibold transition-all duration-200"
             style={{
-              background: active ? c.bg : "transparent",
+              background: active ? "hsl(var(--card))" : "transparent",
               color: active ? c.color : "var(--vx-text-3)",
+              boxShadow: active ? "var(--shadow-sm)" : "none",
             }}
           >
             <Icon className="h-3.5 w-3.5" /> {c.label}
-            {active && <span className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full" style={{ background: c.color }} />}
           </button>
         );
       })}
@@ -534,35 +534,39 @@ function HeroCard({ icon: Icon, iconColor, label, value, format, delta, sub }: a
   const positive = delta >= 0;
   return (
     <div
-      className="relative rounded-[10px] p-5 vx-card-hover bg-card"
-      style={{ border: "0.5px solid hsl(var(--border))" }}
+      className="relative rounded-xl overflow-hidden vx-card-hover"
+      style={{ border: "1px solid hsl(var(--border))", boxShadow: "var(--shadow-sm)" }}
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[9.5px] uppercase tracking-[0.07em] font-medium" style={{ color: "var(--vx-text-3)" }}>{label}</span>
-        <div className="h-7 w-7 rounded-md grid place-items-center" style={{ background: "hsl(var(--accent))" }}>
-          <Icon className="h-3.5 w-3.5" style={{ color: iconColor }} />
+      {/* Top accent bar */}
+      <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${iconColor}, ${iconColor}88)` }} />
+      <div className="bg-card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] uppercase tracking-[0.10em] font-semibold" style={{ color: "var(--vx-text-3)" }}>{label}</span>
+          <div className="h-8 w-8 rounded-lg grid place-items-center" style={{ background: `${iconColor}14` }}>
+            <Icon className="h-4 w-4" style={{ color: iconColor }} />
+          </div>
         </div>
-      </div>
-      <div className="text-[26px] leading-none font-medium tabular-nums" style={{ color: "var(--vx-navy)" }}>
-        {formatted}
-      </div>
-      {sub && <div className="text-[11px] mt-2" style={{ color: "var(--vx-text-2)" }}>{sub}</div>}
+        <div className="text-[28px] leading-none font-bold tabular-nums tracking-tight" style={{ color: "var(--vx-navy)" }}>
+          {formatted}
+        </div>
+        {sub && <div className="text-[11px] mt-1.5" style={{ color: "var(--vx-text-2)" }}>{sub}</div>}
 
-      {typeof delta === "number" && (
-        <div className="flex items-center gap-2 mt-3">
-          <span
-            className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
-            style={{
-              background: positive ? "var(--vx-green-bg)" : "var(--vx-red-bg)",
-              color: positive ? "var(--vx-green)" : "var(--vx-red)",
-            }}
-          >
-            {positive ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-            {positive ? "+" : ""}{delta.toFixed(1)}%
-          </span>
-          <span className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>vs mês anterior</span>
-        </div>
-      )}
+        {typeof delta === "number" && (
+          <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: "0.5px solid hsl(var(--border))" }}>
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{
+                background: positive ? "var(--vx-green-bg)" : "var(--vx-red-bg)",
+                color: positive ? "var(--vx-green)" : "var(--vx-red)",
+              }}
+            >
+              {positive ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+              {positive ? "+" : ""}{delta.toFixed(1)}%
+            </span>
+            <span className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>vs mês anterior</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -574,18 +578,28 @@ function Kpi({ icon: Icon, iconColor, label, value, format, delta, sub, inverted
   const formatted = formatValue(animated, format);
   const positive = inverted ? delta <= 0 : delta >= 0;
   return (
-    <div className="rounded-[10px] bg-card p-3.5 vx-card-hover" style={{ border: "0.5px solid hsl(var(--border))" }}>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[9.5px] uppercase tracking-[0.07em] font-medium" style={{ color: "var(--vx-text-3)" }}>{label}</span>
-        {Icon && <Icon className="h-3 w-3" style={{ color: iconColor || "var(--vx-text-3)" }} />}
-      </div>
-      <div className="text-[17px] leading-tight font-medium tabular-nums" style={{ color: "var(--vx-navy)" }}>{formatted}{sub && <span className="text-[11px] ml-0.5" style={{ color: "var(--vx-text-3)" }}>{sub}</span>}</div>
-      {typeof delta === "number" && (
-        <div className="mt-1 text-[10px] font-medium inline-flex items-center gap-0.5" style={{ color: positive ? "var(--vx-green)" : "var(--vx-red)" }}>
-          {positive ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
-          {delta > 0 ? "+" : ""}{Math.abs(delta) < 10 ? delta.toFixed(1) : Math.round(delta)}{format === "pct" ? "pp" : "%"}
+    <div className="rounded-xl bg-card overflow-hidden vx-card-hover" style={{ border: "1px solid hsl(var(--border))" }}>
+      <div className="h-[2px]" style={{ background: iconColor || "var(--vx-teal)" }} />
+      <div className="p-3.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[9px] uppercase tracking-[0.09em] font-semibold" style={{ color: "var(--vx-text-3)" }}>{label}</span>
+          {Icon && (
+            <div className="h-6 w-6 rounded-md grid place-items-center" style={{ background: `${iconColor || "var(--vx-teal)"}14` }}>
+              <Icon className="h-3 w-3" style={{ color: iconColor || "var(--vx-text-3)" }} />
+            </div>
+          )}
         </div>
-      )}
+        <div className="text-[18px] leading-tight font-bold tabular-nums" style={{ color: "var(--vx-navy)" }}>
+          {formatted}
+          {sub && <span className="text-[11px] font-normal ml-0.5" style={{ color: "var(--vx-text-3)" }}>{sub}</span>}
+        </div>
+        {typeof delta === "number" && (
+          <div className="mt-1.5 text-[10px] font-semibold inline-flex items-center gap-0.5" style={{ color: positive ? "var(--vx-green)" : "var(--vx-red)" }}>
+            {positive ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+            {delta > 0 ? "+" : ""}{Math.abs(delta) < 10 ? delta.toFixed(1) : Math.round(delta)}{format === "pct" ? "pp" : "%"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

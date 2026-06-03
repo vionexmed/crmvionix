@@ -19,7 +19,33 @@ import {
   Building2, Briefcase, Save, MapPin, Globe, Star,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PhoneInput } from "@/components/ui/phone-input";
 import type { Database } from "@/integrations/supabase/types";
+
+const PAISES = [
+  "Brasil", "Portugal", "Estados Unidos", "Argentina", "Colômbia",
+  "México", "Chile", "Uruguai", "Paraguai", "Peru", "Outro",
+];
+
+const AREAS_ATUACAO = [
+  "Acupuntura", "Alergia e Imunologia", "Anestesiologia", "Angiologia",
+  "Cardiologia", "Cirurgia Cardiovascular", "Cirurgia da Mão",
+  "Cirurgia de Cabeça e Pescoço", "Cirurgia do Aparelho Digestivo",
+  "Cirurgia Geral", "Cirurgia Oncológica", "Cirurgia Pediátrica",
+  "Cirurgia Plástica", "Cirurgia Torácica", "Cirurgia Vascular",
+  "Clínica Médica", "Coloproctologia", "Dermatologia",
+  "Endocrinologia e Metabologia", "Endoscopia", "Fisiatra",
+  "Fisioterapia", "Gastroenterologia", "Geriatria",
+  "Ginecologia e Obstetrícia", "Hematologia e Hemoterapia",
+  "Infectologia", "Mastologia", "Medicina de Emergência",
+  "Medicina de Família e Comunidade", "Medicina do Esporte",
+  "Medicina do Trabalho", "Medicina Intensiva", "Nefrologia",
+  "Neurocirurgia", "Neurologia", "Nutrologia", "Nutrição",
+  "Oftalmologia", "Oncologia Clínica", "Ortopedia e Traumatologia",
+  "Otorrinolaringologia", "Pediatria", "Pneumologia",
+  "Psiquiatria", "Psicologia", "Radiologia e Diagnóstico por Imagem",
+  "Reumatologia", "Urologia", "Outro",
+];
 
 type Contact = Database["public"]["Tables"]["contacts"]["Row"];
 type Company = Database["public"]["Tables"]["companies"]["Row"];
@@ -63,6 +89,8 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Contact>>({});
+  // Metadata fields (editable separately)
+  const [meta, setMeta] = useState({ pais: "", cidade: "", interesse: "", empresa_manual: "" });
   const [activities, setActivities] = useState<Activity[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -83,6 +111,13 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
   useEffect(() => {
     if (contact) {
       setForm(contact);
+      const m = ((contact as any).metadata as Record<string, string>) || {};
+      setMeta({
+        pais: m.pais || "",
+        cidade: m.cidade || "",
+        interesse: m.interesse || "",
+        empresa_manual: m.empresa_manual || "",
+      });
       setEditing(false);
       fetchRelated();
     }
@@ -90,10 +125,23 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
 
   const handleSave = async () => {
     if (!contact) return;
+    const existingMeta = ((contact as any).metadata as Record<string, unknown>) || {};
     const { error } = await supabase.from("contacts").update({
-      first_name: form.first_name, last_name: form.last_name, email: form.email,
-      phone: form.phone, title: form.title, status: form.status as ContactStatus,
-      linkedin_url: form.linkedin_url, company_id: (form as any).company_id || null,
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email,
+      phone: form.phone,
+      title: form.title,
+      status: form.status as ContactStatus,
+      linkedin_url: form.linkedin_url,
+      company_id: (form as any).company_id || null,
+      metadata: {
+        ...existingMeta,
+        pais: meta.pais,
+        cidade: meta.cidade,
+        interesse: meta.interesse,
+        empresa_manual: meta.empresa_manual,
+      } as never,
     }).eq("id", contact.id);
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     setEditing(false);
@@ -152,23 +200,78 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
           <TabsContent value="overview" className="mt-4 space-y-4">
             {editing ? (
               <div className="space-y-3">
+                {/* Nome */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1"><Label className="text-xs">Nome</Label>
                     <Input value={form.first_name || ""} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></div>
                   <div className="space-y-1"><Label className="text-xs">Sobrenome</Label>
                     <Input value={form.last_name || ""} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></div>
                 </div>
+
+                {/* Empresa */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Empresa</Label>
+                  {companies.length > 0 ? (
+                    <Select value={(form as any).company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? null : v } as any)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
+                        {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={meta.empresa_manual} onChange={(e) => setMeta({ ...meta, empresa_manual: e.target.value })} placeholder="Nome da empresa" />
+                  )}
+                </div>
+
+                {/* País + Cidade */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">País</Label>
+                    <Select value={meta.pais || "__none__"} onValueChange={(v) => setMeta({ ...meta, pais: v === "__none__" ? "" : v })}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Nenhum —</SelectItem>
+                        {PAISES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Cidade</Label>
+                    <Input value={meta.cidade} onChange={(e) => setMeta({ ...meta, cidade: e.target.value })} placeholder="Ex: São Paulo" />
+                  </div>
+                </div>
+
+                {/* Telefone */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Telefone</Label>
+                  <PhoneInput value={form.phone || ""} onChange={(e164) => setForm({ ...form, phone: e164 })} />
+                </div>
+
+                {/* Email */}
                 <div className="space-y-1"><Label className="text-xs">Email</Label>
                   <Input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Telefone</Label>
-                  <Input value={form.phone || ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">Cargo</Label>
-                  <Input value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-                <div className="space-y-1"><Label className="text-xs">LinkedIn</Label>
-                  <Input value={form.linkedin_url || ""} onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })} /></div>
+
+                {/* Área de atuação */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Área de atuação</Label>
+                  <Select value={form.title || "__none__"} onValueChange={(v) => setForm({ ...form, title: v === "__none__" ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                      {AREAS_ATUACAO.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Produto / Interesse */}
+                <div className="space-y-1"><Label className="text-xs">Produto / Interesse</Label>
+                  <Input value={meta.interesse} onChange={(e) => setMeta({ ...meta, interesse: e.target.value })} placeholder="Ex: Likawave Pro, consultoria..." /></div>
+
+                {/* Status */}
                 <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
-                  <Select value={form.status || "lead"} onValueChange={(v) => setForm({ ...form, status: v as ContactStatus })}>
+                  <Select value={form.status || "prospect"} onValueChange={(v) => setForm({ ...form, status: v as ContactStatus })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="lead">Lead</SelectItem>
@@ -178,17 +281,8 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Empresa</Label>
-                  <Select value={(form as any).company_id || "none"} onValueChange={(v) => setForm({ ...form, company_id: v === "none" ? null : v } as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleSave} className="w-full"><Save className="mr-2 h-4 w-4" />Salvar</Button>
+
+                <Button onClick={handleSave} className="w-full"><Save className="mr-2 h-4 w-4" />Salvar alterações</Button>
               </div>
             ) : (
               <div className="space-y-3">

@@ -158,10 +158,10 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
           {/* País + Cidade — lado a lado */}
           <div className="grid grid-cols-2 gap-3">
             <Field label="País">
-              <Select value={pais} onValueChange={setPais}>
+              <Select value={pais || "__none__"} onValueChange={(v) => setPais(v === "__none__" ? "" : v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— Nenhum —</SelectItem>
+                  <SelectItem value="__none__">— Nenhum —</SelectItem>
                   {PAISES.map((p) => (
                     <SelectItem key={p} value={p}>{p}</SelectItem>
                   ))}
@@ -198,10 +198,10 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
 
           {/* Área de atuação */}
           <Field label="Área de atuação (opcional)">
-            <Select value={areaAtuacao} onValueChange={setAreaAtuacao}>
+            <Select value={areaAtuacao || "__none__"} onValueChange={(v) => setAreaAtuacao(v === "__none__" ? "" : v)}>
               <SelectTrigger><SelectValue placeholder="Selecione ou deixe em branco" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">— Nenhuma —</SelectItem>
+                <SelectItem value="__none__">— Nenhuma —</SelectItem>
                 {AREAS_ATUACAO.map((a) => (
                   <SelectItem key={a} value={a}>{a}</SelectItem>
                 ))}

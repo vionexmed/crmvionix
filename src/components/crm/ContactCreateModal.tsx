@@ -108,7 +108,7 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
       email: email || null,
       phone: phone || null,
       title: areaAtuacao || null,
-      status: "lead",
+      status: "prospect",
       owner_id: user?.id,
       company_id: resolvedCompanyId,
       metadata: {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Plus, Inbox, Send, RefreshCw, Settings, ExternalLink, CheckCircle2 } from "lucide-react";
+import { Mail, Plus, Inbox, Send, RefreshCw, Settings, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,16 +25,49 @@ export default function InboxMarketing() {
     if (!orgId) return;
     setConnecting(true);
     try {
-      const { data } = await supabase.functions.invoke("gmail-oauth-start", {
-        body: { purpose: "marketing", label: "Email Marketing" },
+      const { data, error } = await supabase.functions.invoke("gmail-oauth-start", {
+        body: {
+          purpose: "marketing",
+          label: "Email Marketing",
+          return_to: `${window.location.origin}/marketing/inbox`,
+        },
       });
+
+      if (error) {
+        toast({
+          title: "Erro ao conectar Gmail",
+          description: error.message || "Verifique se o Google OAuth está configurado em Integrações → Gmail.",
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
+      }
+
+      if (data?.error) {
+        toast({
+          title: "Configuração necessária",
+          description: data.error,
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
+      }
+
       if (data?.url) {
         window.location.href = data.url;
       } else {
-        toast({ title: "Erro ao iniciar conexão", variant: "destructive" });
+        toast({
+          title: "Erro ao iniciar OAuth",
+          description: "Resposta inesperada. Configure o Google OAuth em Integrações → Gmail primeiro.",
+          variant: "destructive",
+        });
       }
-    } catch {
-      toast({ title: "Erro ao conectar Gmail", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({
+        title: "Erro ao conectar Gmail",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+        variant: "destructive",
+      });
     }
     setConnecting(false);
   };
@@ -82,6 +115,19 @@ export default function InboxMarketing() {
           )
         }
       />
+
+      {/* Aviso de pré-requisito */}
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 text-sm">
+        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-amber-800 dark:text-amber-300">Pré-requisito: configurar OAuth do Google</p>
+          <p className="text-amber-700 dark:text-amber-400 mt-0.5 text-xs leading-relaxed">
+            Para conectar o Gmail você precisa ter o <strong>Google OAuth Client ID</strong> configurado em{" "}
+            <a href="/settings/integrations" className="underline font-medium">Configurações → Integrações → Gmail</a>.
+            Sem isso o botão de conexão retornará erro.
+          </p>
+        </div>
+      </div>
 
       {!connected ? (
         /* Setup state — email não conectado */

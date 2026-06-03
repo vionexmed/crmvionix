@@ -193,7 +193,7 @@ export default function Inbox() {
     setReplyBody("");
     setForwardTo("");
     setReplyMode(null);
-    fetchData();
+    if (orgId) qc.invalidateQueries({ queryKey: emailsKeys.all(orgId) });
     toast({ title: "Enviado" });
   };
 
@@ -208,7 +208,7 @@ export default function Inbox() {
       toast({ title: "Erro ao sincronizar", description: (data as any)?.error || error?.message, variant: "destructive" });
       return;
     }
-    await fetchData();
+    if (orgId) await qc.invalidateQueries({ queryKey: emailsKeys.all(orgId) });
     toast({ title: `${(data as any)?.synced ?? 0} novos emails` });
   };
 
@@ -605,7 +605,7 @@ export default function Inbox() {
         </>
       )}
 
-      <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} onSent={fetchData} />
+      <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} onSent={() => { if (orgId) qc.invalidateQueries({ queryKey: emailsKeys.all(orgId) }); }} />
     </div>
   );
 }

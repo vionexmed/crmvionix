@@ -8,13 +8,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { ESPECIALIDADE_OPTIONS } from "@/components/crm/likawave-options";
 import type { Database } from "@/integrations/supabase/types";
 
 type Company = Database["public"]["Tables"]["companies"]["Row"];
@@ -26,6 +24,19 @@ interface ContactCreateModalProps {
   companies: Company[];
 }
 
+const AREAS_ATUACAO = [
+  "Medicina", "Odontologia", "Fisioterapia", "Nutrição", "Psicologia",
+  "Enfermagem", "Farmácia", "Estética", "Educação Física", "Veterinária",
+  "Saúde & Bem-estar", "Tecnologia", "Indústria", "Varejo", "Serviços",
+  "Construção Civil", "Agronegócio", "Logística", "Financeiro", "Jurídico",
+  "Educação", "Marketing & Publicidade", "Outro",
+];
+
+const PAISES = [
+  "Brasil", "Portugal", "Estados Unidos", "Argentina", "Colômbia",
+  "México", "Chile", "Uruguai", "Paraguai", "Peru", "Outro",
+];
+
 export function ContactCreateModal({ open, onOpenChange, onCreated, companies }: ContactCreateModalProps) {
   const { orgId } = useOrg();
   const { user } = useAuth();
@@ -36,15 +47,18 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneValid, setPhoneValid] = useState(false);
-  const [especialidade, setEspecialidade] = useState("");
-  const [local, setLocal] = useState("");
-  const [descricao, setDescricao] = useState("");
   const [companyId, setCompanyId] = useState("none");
+  const [companyName, setCompanyName] = useState("");
+  const [pais, setPais] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [areaAtuacao, setAreaAtuacao] = useState("");
+  const [interesse, setInteresse] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const reset = () => {
     setFullName(""); setEmail(""); setPhone(""); setPhoneValid(false);
-    setEspecialidade(""); setLocal(""); setDescricao(""); setCompanyId("none"); setErrors({});
+    setCompanyId("none"); setCompanyName(""); setPais(""); setCidade("");
+    setAreaAtuacao(""); setInteresse(""); setErrors({});
   };
 
   useEffect(() => {
@@ -67,20 +81,26 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
     const [first, ...rest] = fullName.trim().split(/\s+/);
     const last = rest.join(" ") || null;
 
+    // Se digitou nome de empresa manualmente e não selecionou uma existente,
+    // salvamos no título/metadata
+    const resolvedCompanyId = companyId !== "none" ? companyId : null;
+
     const { error } = await supabase.from("contacts").insert({
       org_id: orgId,
       first_name: first,
       last_name: last,
       email: email || null,
       phone: phone || null,
-      title: especialidade || null,
+      title: areaAtuacao || null,
       status: "lead",
       owner_id: user?.id,
-      company_id: companyId !== "none" ? companyId : null,
+      company_id: resolvedCompanyId,
       metadata: {
-        cidade_estado: local,
-        especialidade_medica: especialidade,
-        descricao,
+        pais,
+        cidade,
+        area_atuacao: areaAtuacao,
+        interesse,
+        empresa_manual: companyId === "none" ? companyName : "",
         responsavel_cadastro: user?.email || "",
       } as never,
     });
@@ -97,106 +117,122 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Novo Contato</DialogTitle>
-          <DialogDescription>Preencha os dados principais do contato</DialogDescription>
+          <DialogDescription>Preencha os dados do contato</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 mt-1">
+        <div className="space-y-3 mt-1">
           {/* Nome */}
-          <div className="space-y-1.5">
-            <Label>Nome completo <span className="text-destructive">*</span></Label>
+          <Field label="Nome completo *" error={errors.fullName}>
             <Input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Ex: Ana Beatriz Costa"
               autoFocus
             />
-            {errors.fullName && <p className="text-xs text-destructive">{errors.fullName}</p>}
-          </div>
+          </Field>
 
-          {/* Email */}
-          <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nome@email.com"
-            />
-            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-          </div>
-
-          {/* Telefone */}
-          <div className="space-y-1.5">
-            <Label>Telefone</Label>
-            <PhoneInput
-              value={phone}
-              onChange={(e164, valid) => { setPhone(e164); setPhoneValid(valid); }}
-            />
-            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
-          </div>
-
-          {/* Especialidade */}
-          <div className="space-y-1.5">
-            <Label>Especialidade</Label>
-            <Select value={especialidade} onValueChange={setEspecialidade}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione ou deixe em branco" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">— Nenhuma —</SelectItem>
-                {ESPECIALIDADE_OPTIONS.map((o) => (
-                  <SelectItem key={o} value={o}>{o}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Local */}
-          <div className="space-y-1.5">
-            <Label>Cidade / Estado</Label>
-            <Input
-              value={local}
-              onChange={(e) => setLocal(e.target.value)}
-              placeholder="Ex: São Paulo / SP"
-            />
-          </div>
-
-          {/* Descrição */}
-          <div className="space-y-1.5">
-            <Label>Descrição</Label>
-            <Textarea
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Informações adicionais sobre o contato..."
-              rows={3}
-              className="resize-none"
-            />
-          </div>
-
-          {/* Empresa (somente se houver empresas cadastradas) */}
-          {companies.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Empresa</Label>
+          {/* Empresa */}
+          <Field label="Empresa">
+            {companies.length > 0 ? (
               <Select value={companyId} onValueChange={setCompanyId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione ou deixe em branco" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
+                  <SelectItem value="none">— Nenhuma cadastrada —</SelectItem>
                   {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
+            ) : (
+              <Input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Nome da empresa"
+              />
+            )}
+          </Field>
 
-          <Button onClick={handleCreate} className="w-full" disabled={saving}>
+          {/* País + Cidade — lado a lado */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="País">
+              <Select value={pais} onValueChange={setPais}>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— Nenhum —</SelectItem>
+                  {PAISES.map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Cidade">
+              <Input
+                value={cidade}
+                onChange={(e) => setCidade(e.target.value)}
+                placeholder="Ex: São Paulo"
+              />
+            </Field>
+          </div>
+
+          {/* Número */}
+          <Field label="Número de telefone" error={errors.phone}>
+            <PhoneInput
+              value={phone}
+              onChange={(e164, valid) => { setPhone(e164); setPhoneValid(valid); }}
+            />
+          </Field>
+
+          {/* Email */}
+          <Field label="Email" error={errors.email}>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="contato@email.com"
+            />
+          </Field>
+
+          {/* Área de atuação */}
+          <Field label="Área de atuação (opcional)">
+            <Select value={areaAtuacao} onValueChange={setAreaAtuacao}>
+              <SelectTrigger><SelectValue placeholder="Selecione ou deixe em branco" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">— Nenhuma —</SelectItem>
+                {AREAS_ATUACAO.map((a) => (
+                  <SelectItem key={a} value={a}>{a}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {/* Interesse */}
+          <Field label="Produto / Interesse">
+            <Input
+              value={interesse}
+              onChange={(e) => setInteresse(e.target.value)}
+              placeholder="Ex: Likawave Pro, consultoria, assinatura..."
+            />
+          </Field>
+
+          <Button onClick={handleCreate} className="w-full mt-2" disabled={saving}>
             {saving ? "Salvando..." : "Criar Contato"}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm">{label}</Label>
+      {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
   );
 }

@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -37,12 +38,13 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
   const [phoneValid, setPhoneValid] = useState(false);
   const [especialidade, setEspecialidade] = useState("");
   const [local, setLocal] = useState("");
+  const [descricao, setDescricao] = useState("");
   const [companyId, setCompanyId] = useState("none");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const reset = () => {
     setFullName(""); setEmail(""); setPhone(""); setPhoneValid(false);
-    setEspecialidade(""); setLocal(""); setCompanyId("none"); setErrors({});
+    setEspecialidade(""); setLocal(""); setDescricao(""); setCompanyId("none"); setErrors({});
   };
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
       metadata: {
         cidade_estado: local,
         especialidade_medica: especialidade,
+        descricao,
         responsavel_cadastro: user?.email || "",
       } as never,
     });
@@ -158,6 +161,18 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
               value={local}
               onChange={(e) => setLocal(e.target.value)}
               placeholder="Ex: São Paulo / SP"
+            />
+          </div>
+
+          {/* Descrição */}
+          <div className="space-y-1.5">
+            <Label>Descrição</Label>
+            <Textarea
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Informações adicionais sobre o contato..."
+              rows={3}
+              className="resize-none"
             />
           </div>
 

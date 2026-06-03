@@ -3,7 +3,7 @@ import {
   LayoutGrid, Facebook, Chrome, TrendingUp, TrendingDown,
   ArrowUpRight, DollarSign, Target as TargetIcon, MousePointerClick,
   Eye, Users as UsersIcon, Zap, Activity, BarChart3, RefreshCw,
-  Calendar, Database, Sparkles,
+  Calendar, Database, Sparkles, PlugZap,
 } from "lucide-react";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -203,6 +203,29 @@ function TabBar({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void 
   );
 }
 
+// ────────────── Empty state ──────────────
+
+function MarketingEmptyState({ platform, tab }: { platform: string; tab: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent mb-4 ring-8 ring-accent/20">
+        <PlugZap className="h-8 w-8 text-primary" />
+      </div>
+      <h3 className="text-base font-semibold" style={{ color: "var(--vx-navy)" }}>
+        Sem dados de {platform}
+      </h3>
+      <p className="mt-2 max-w-sm text-sm" style={{ color: "var(--vx-text-2)" }}>
+        Conecte sua conta <strong>{platform}</strong> em{" "}
+        <a href="/settings/integrations" className="text-primary underline underline-offset-2">Configurações → Integrações</a>{" "}
+        para ver os dados de campanhas aqui.
+      </p>
+      <p className="mt-3 text-xs" style={{ color: "var(--vx-text-3)" }}>
+        Aba: {tab}
+      </p>
+    </div>
+  );
+}
+
 // ────────────── PANEL: VISÃO GERAL ──────────────
 
 type PanelProps = { data: ReturnType<typeof useMarketingData>; days: number };
@@ -210,6 +233,8 @@ type PanelProps = { data: ReturnType<typeof useMarketingData>; days: number };
 function PanelVisao({ data, days }: PanelProps) {
   const metaCamps = data.meta.campaigns;
   const googleCamps = data.google.campaigns;
+  const hasData = metaCamps.length > 0 || googleCamps.length > 0;
+
   const totalMeta = sumBy(metaCamps, "investido");
   const totalGoogle = sumBy(googleCamps, "investido");
   const totalInv = totalMeta + totalGoogle;
@@ -222,16 +247,20 @@ function PanelVisao({ data, days }: PanelProps) {
   const ctrAvg = totalImp ? (totalClicks / totalImp) * 100 : 0;
   const cvrAvg = totalClicks ? (totalLeads / totalClicks) * 100 : 0;
 
+  if (!hasData) {
+    return <MarketingEmptyState platform="Meta Ads ou Google Ads" tab="Visão Geral" />;
+  }
+
   // Série diária do período selecionado
   const series = sliceCompareSeries(dailyChannelsCompare, days);
 
   return (
     <div className="space-y-5">
-      {/* Hero cards (limpos, sem sparkline backdrop) */}
+      {/* Hero cards — deltas reais apenas quando há dados */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 vx-stagger">
-        <HeroCard icon={DollarSign} iconColor="var(--vx-teal)"   label="Total investido"     value={totalInv} format="brl"        delta={12.4} sub={`Meta ${fmtBRL(totalMeta)} · Google ${fmtBRL(totalGoogle)}`} />
-        <HeroCard icon={TrendingUp} iconColor="var(--vx-green)"  label="Receita atribuída"   value={totalRev} format="brl"        delta={24.8} sub={`Atribuição ${days}d · last-click + view`} />
-        <HeroCard icon={Zap}        iconColor="var(--vx-purple)" label="ROAS consolidado"    value={roas}     format="multiplier" delta={6.2}  sub="Meta interna 3.0×" />
+        <HeroCard icon={DollarSign} iconColor="var(--vx-teal)"   label="Total investido"   value={totalInv} format="brl"        sub={`Meta ${fmtBRL(totalMeta)} · Google ${fmtBRL(totalGoogle)}`} />
+        <HeroCard icon={TrendingUp} iconColor="var(--vx-green)"  label="Receita atribuída" value={totalRev} format="brl"        sub={`Atribuição ${days}d · last-click + view`} />
+        <HeroCard icon={Zap}        iconColor="var(--vx-purple)" label="ROAS consolidado"  value={roas}     format="multiplier" sub="Meta interna 3.0×" />
       </div>
 
       {/* KPIs secundários */}
@@ -331,6 +360,11 @@ function PanelVisao({ data, days }: PanelProps) {
 
 function PanelMeta({ data, days }: PanelProps) {
   const rows = data.meta.campaigns;
+
+  if (rows.length === 0) {
+    return <MarketingEmptyState platform="Meta Ads" tab="Meta Ads" />;
+  }
+
   const inv = sumBy(rows, "investido");
   const rev = sumBy(rows, "receita_atrib");
   const imp = sumBy(rows, "impressoes");
@@ -421,6 +455,11 @@ function PanelMeta({ data, days }: PanelProps) {
 
 function PanelGoogle({ data, days }: PanelProps) {
   const rows = data.google.campaigns;
+
+  if (rows.length === 0) {
+    return <MarketingEmptyState platform="Google Ads" tab="Google Ads" />;
+  }
+
   const inv = sumBy(rows, "investido");
   const rev = sumBy(rows, "receita_atrib");
   const imp = sumBy(rows, "impressoes");

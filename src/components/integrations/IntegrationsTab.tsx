@@ -171,49 +171,29 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
   const integrations = [
     {
       provider: "meta", name: "Meta Business", icon: MetaIcon,
-      description: "Meta Ads + WhatsApp Business API — campanhas e mensagens",
+      description: "Meta Ads (campanhas) + WhatsApp Business (mensagens)",
       connectAction: handleMetaConnect,
       connectLoading: metaConnecting,
       fields: [
-        { key: "_sec_ads", label: "Meta Ads (Facebook & Instagram)", type: "section" as const },
+        { key: "_sec_ads", label: "Meta Ads", type: "section" as const },
         {
-          key: "access_token", label: "Token de Acesso (Access Token)", placeholder: "EAAxxxxxx...", type: "secret" as const,
+          key: "access_token", label: "Token de acesso", placeholder: "EAAxxxxxx...", type: "secret" as const,
           helpText: "Gere em",
           helpUrl: "https://developers.facebook.com/tools/explorer/",
           helpLabel: "Meta Graph API Explorer",
         },
         {
-          key: "ad_account_id", label: "ID da Conta de Anúncio (Ad Account ID)", placeholder: "act_123456789",
-          helpText: 'Business Manager → Contas de Anúncio. Copie o ID no formato act_XXXXXXX',
+          key: "ad_account_id", label: "ID da conta de anúncio", placeholder: "act_123456789",
+          helpText: "Business Manager → Contas de Anúncio → copie o ID (ex: act_123…)",
+        },
+        { key: "_sec_waba", label: "WhatsApp Business", type: "section" as const },
+        {
+          key: "phone_number_id", label: "Phone Number ID", placeholder: "987654321098765",
+          helpText: "Business Manager → Contas do WhatsApp → selecione o número",
         },
         {
-          key: "business_id", label: "ID do Business Manager (Business ID)", placeholder: "123456789012345",
-          helpText: "Encontre em",
-          helpUrl: "https://business.facebook.com/settings/",
-          helpLabel: "Meta Business Settings",
-        },
-        { key: "_sec_waba", label: "WhatsApp Business API (Cloud API)", type: "section" as const },
-        {
-          key: "waba_id", label: "WABA ID (WhatsApp Business Account ID)", placeholder: "123456789012345",
-          helpText: 'Business Manager → Contas do WhatsApp → ID da conta',
-        },
-        {
-          key: "phone_number_id", label: "Phone Number ID (ID do número)", placeholder: "987654321098765",
-          helpText: 'Business Manager → Contas do WhatsApp → selecione o número → Phone Number ID',
-        },
-        {
-          key: "waba_token", label: "Token permanente do WhatsApp", placeholder: "EAAxxxxxx...", type: "secret" as const,
-          helpText: "Token de sistema gerado no Business Manager com permissão whatsapp_business_messaging",
-        },
-        { key: "_sec_app", label: "Meta App (opcional)", type: "section" as const },
-        {
-          key: "app_id", label: "App ID", placeholder: "123456789012345",
-          helpText: "ID do seu App em",
-          helpUrl: "https://developers.facebook.com/apps/",
-          helpLabel: "developers.facebook.com",
-        },
-        {
-          key: "app_secret", label: "App Secret", placeholder: "xxxxxxxxxxxxx", type: "secret" as const,
+          key: "waba_token", label: "Token do WhatsApp", placeholder: "EAAxxxxxx...", type: "secret" as const,
+          helpText: "Mesmo token de acesso acima, ou gere um token de sistema permanente",
         },
       ],
     },
@@ -350,12 +330,8 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
           <div className="space-y-3">
             {editProvider === "meta" && (
               <div className="rounded-md border border-[#1877F2]/30 bg-[#EEF4FF] p-3 text-[11px] text-[#1877F2]">
-                <strong>Preencha apenas as seções que você usa:</strong>
-                <ul className="mt-1.5 space-y-1 list-disc list-inside text-[#1877F2]/80">
-                  <li><strong>Meta Ads</strong> — Access Token + ID da Conta de Anúncio → importa campanhas no marketing</li>
-                  <li><strong>WhatsApp Business API</strong> — WABA ID + Phone Number ID + Token → habilita envio de mensagens pelo CRM</li>
-                  <li>Token: gere um <em>token de usuário do sistema</em> no <a href="https://business.facebook.com/settings/" target="_blank" rel="noopener noreferrer" className="underline">Business Manager</a> para não expirar</li>
-                </ul>
+                Preencha só a seção que você usa — <strong>Meta Ads</strong> para campanhas, <strong>WhatsApp</strong> para mensagens, ou ambas.
+                O token é gerado no <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" className="underline font-medium">Meta Graph API Explorer</a>.
               </div>
             )}
             {editProvider === "gmail" && (

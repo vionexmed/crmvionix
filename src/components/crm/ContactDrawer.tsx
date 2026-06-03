@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Edit2, Check, X, Phone, Mail, FileText, CheckSquare, CalendarDays,
-  Building2, Briefcase, Save,
+  Building2, Briefcase, Save, MapPin, Globe, Star,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
@@ -218,15 +218,41 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                 )}
                 {(() => {
                   const comp = companies.find((c) => c.id === (contact as any).company_id);
-                  return comp ? (
+                  const meta = (contact as any).metadata as Record<string, string> | null;
+                  const empresaManual = meta?.empresa_manual;
+                  const empresa = comp?.name || empresaManual;
+                  return empresa ? (
                     <div className="flex items-center gap-3 text-sm">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>{comp.name}</span>
+                      <span>{empresa}</span>
                     </div>
                   ) : null;
                 })()}
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-foreground">Criado em</span>
+                {(() => {
+                  const meta = (contact as any).metadata as Record<string, string> | null;
+                  if (!meta) return null;
+                  const pais = meta.pais;
+                  const cidade = meta.cidade;
+                  const localStr = [cidade, pais].filter(Boolean).join(", ");
+                  return localStr ? (
+                    <div className="flex items-center gap-3 text-sm">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span>{localStr}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {(() => {
+                  const meta = (contact as any).metadata as Record<string, string> | null;
+                  const interesse = meta?.interesse;
+                  return interesse ? (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Star className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-foreground">{interesse}</span>
+                    </div>
+                  ) : null;
+                })()}
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span>Criado em</span>
                   <span>{contact.created_at ? new Date(contact.created_at).toLocaleDateString("pt-BR") : "—"}</span>
                 </div>
               </div>

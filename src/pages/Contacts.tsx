@@ -326,12 +326,12 @@ export default function Contacts() {
               <TableRow>
                 <TableHead className="w-10"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todos" /></TableHead>
                 <TableHead><SortHeader label="Nome" field="name" /></TableHead>
-                <TableHead className="hidden sm:table-cell"><SortHeader label="Email" field="email" /></TableHead>
-                <TableHead className="hidden md:table-cell">Empresa</TableHead>
-                <TableHead className="hidden lg:table-cell"><SortHeader label="Cargo" field="title" /></TableHead>
-                <TableHead className="hidden lg:table-cell">Telefone</TableHead>
+                <TableHead><SortHeader label="Email" field="email" /></TableHead>
+                <TableHead className="hidden sm:table-cell">Empresa</TableHead>
+                <TableHead className="hidden md:table-cell"><SortHeader label="Especialidade" field="title" /></TableHead>
+                <TableHead className="hidden md:table-cell">Telefone</TableHead>
                 <TableHead><SortHeader label="Status" field="status" /></TableHead>
-                <TableHead className="hidden md:table-cell"><SortHeader label="Criado em" field="created_at" /></TableHead>
+                <TableHead className="hidden lg:table-cell"><SortHeader label="Criado em" field="created_at" /></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -372,12 +372,17 @@ export default function Contacts() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground hidden sm:table-cell">{c.email}</TableCell>
-                  <TableCell className="text-muted-foreground hidden md:table-cell text-xs">
-                    {(() => { const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id); return comp?.name || "—"; })()}
+                  <TableCell className="text-muted-foreground text-xs">{c.email || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground hidden sm:table-cell text-xs">
+                    {(() => {
+                      const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id);
+                      if (comp) return comp.name;
+                      const meta = (c as Record<string, unknown>).metadata as Record<string, string> | null;
+                      return meta?.empresa_manual || "—";
+                    })()}
                   </TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">{c.title}</TableCell>
-                  <TableCell className="text-muted-foreground hidden lg:table-cell">{cleanPhone(c.phone)}</TableCell>
+                  <TableCell className="text-muted-foreground hidden md:table-cell text-xs">{c.title || "—"}</TableCell>
+                  <TableCell className="text-muted-foreground hidden md:table-cell text-xs">{cleanPhone(c.phone) || "—"}</TableCell>
                   <TableCell>
                     <span className={`vx-badge vx-badge-${c.status || "lead"}`}>
                       {statusLabels[c.status || "lead"]}

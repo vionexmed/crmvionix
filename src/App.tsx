@@ -37,6 +37,9 @@ const Setup = lazy(() => import("./pages/Setup"));
 const Leads = lazy(() => import("./pages/Leads"));
 const Marketing = lazy(() => import("./pages/Marketing"));
 const MarketingOverview = lazy(() => import("./pages/marketing/Overview"));
+const MarketingTrafegoPago = lazy(() => import("./pages/marketing/TrafegoPago"));
+const MarketingTrafegoOrganico = lazy(() => import("./pages/marketing/TrafegoOrganico"));
+const MarketingPontuacaoLeads = lazy(() => import("./pages/marketing/PontuacaoLeads"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,7 +101,9 @@ const App = () => (
                 <Route path="/sales-goals" element={<SuspenseRoute><SalesGoals /></SuspenseRoute>} />
                 <Route path="/marketing" element={<SuspenseRoute><Marketing /></SuspenseRoute>}>
                   <Route path="visao-geral" element={<SuspenseRoute><MarketingOverview /></SuspenseRoute>} />
-
+                  <Route path="trafego-pago" element={<SuspenseRoute><MarketingTrafegoPago /></SuspenseRoute>} />
+                  <Route path="trafego-organico" element={<SuspenseRoute><MarketingTrafegoOrganico /></SuspenseRoute>} />
+                  <Route path="pontuacao-leads" element={<SuspenseRoute><MarketingPontuacaoLeads /></SuspenseRoute>} />
                 </Route>
                 <Route path="/settings" element={<SuspenseRoute><Settings /></SuspenseRoute>} />
                 <Route path="/settings/integrations" element={<SuspenseRoute><Integrations /></SuspenseRoute>} />

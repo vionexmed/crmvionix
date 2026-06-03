@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, UserPlus, Building2, Activity, BarChart3,
   Settings, LogOut, CheckSquare, AlertTriangle, Inbox, FileText, Zap,
   Target, Plug, Shield, Handshake, MessageSquare, TrendingUp,
+  Megaphone, MousePointerClick, Search, Star,
 } from "lucide-react";
 import vionexLogo from "@/assets/vionex-logo.png";
 import { NavLink } from "@/components/NavLink";
@@ -39,12 +40,21 @@ const navGroups = [
     ],
   },
   {
+    label: "Marketing",
+    items: [
+      { title: "Visão Geral",      url: "/marketing/visao-geral",        icon: Megaphone },
+      { title: "Tráfego Pago",     url: "/marketing/trafego-pago",       icon: MousePointerClick },
+      { title: "Tráfego Orgânico", url: "/marketing/trafego-organico",   icon: Search },
+      { title: "Pontuação Leads",  url: "/marketing/pontuacao-leads",    icon: Star },
+    ],
+  },
+  {
     label: "Analytics",
     items: [
-      { title: "Metas",      url: "/sales-goals",  icon: Target },
+      { title: "Metas",        url: "/sales-goals",  icon: Target },
       { title: "Lead Scoring", url: "/lead-scoring", icon: TrendingUp },
-      { title: "Relatórios", url: "/reports",       icon: BarChart3 },
-      { title: "Automações", url: "/automations",   icon: Zap },
+      { title: "Relatórios",   url: "/reports",      icon: BarChart3 },
+      { title: "Automações",   url: "/automations",  icon: Zap },
     ],
   },
   {

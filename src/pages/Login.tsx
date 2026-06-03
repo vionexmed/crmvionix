@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Mail, Lock, User } from "lucide-react";
 import vionexLogo from "@/assets/Captura_de_Tela_2026-06-03_às_10.38.57-removebg-preview.png";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
 
 export default function Login() {
   const [email, setEmail] = useState("");

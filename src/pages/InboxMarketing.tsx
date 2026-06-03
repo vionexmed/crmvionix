@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useToast } from "@/hooks/use-toast";
-import { useState as useLocalState } from "react";
 
 const FEATURES = [
   { icon: Send,     title: "Campanhas",       desc: "Envie email marketing segmentado para seus leads e clientes." },

@@ -42,8 +42,13 @@ export class ErrorBoundary extends Component<Props, State> {
             Um erro inesperado ocorreu neste componente. Tente recarregar a página.
           </p>
           <p className="mt-2 font-mono text-xs text-muted-foreground">
-            ID do erro: {this.state.errorId}
+            ID: {this.state.errorId}
           </p>
+          {this.state.error && (
+            <p className="mt-1 max-w-lg break-all rounded bg-muted px-3 py-2 font-mono text-[11px] text-destructive">
+              {this.state.error.message}
+            </p>
+          )}
           <div className="mt-4 flex gap-2">
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               <RefreshCw className="mr-2 h-4 w-4" />Recarregar

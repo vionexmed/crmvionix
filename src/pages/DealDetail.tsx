@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DealQualification } from "@/components/crm/DealQualification";
 import { useOrg } from "@/hooks/useOrg";
@@ -72,6 +72,13 @@ export default function DealDetail() {
   // Add activity
   const [activityForm, setActivityForm] = useState({ type: "note" as ActivityType, title: "", body: "" });
 
+  // Navigate away if deal not found (must be in useEffect, not during render)
+  useEffect(() => {
+    if (!dealLoading && !deal) {
+      navigate("/deals");
+    }
+  }, [deal, dealLoading, navigate]);
+
   if (dealLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -80,10 +87,7 @@ export default function DealDetail() {
     );
   }
 
-  if (!deal) {
-    navigate("/deals");
-    return null;
-  }
+  if (!deal) return null;
 
   // Health indicator based on last activity
   const lastActivity = activities[0];

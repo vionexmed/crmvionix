@@ -52,7 +52,8 @@ export default function Deals() {
   // Supporting data
   const { data: allStages = [] } = usePipelineStages();
   const { data: pipelines = [] } = usePipelines();
-  const { data: contacts = [] } = useContacts();
+  const { data: contactsResult } = useContacts({ pageSize: 5000 });
+  const contacts = contactsResult?.data ?? [];
   const { data: companies = [] } = useCompanies();
   const { data: members = [] } = useMembers();
 

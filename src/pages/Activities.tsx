@@ -254,7 +254,7 @@ export default function Activities() {
   if (!orgId) return <div className="py-20 text-center text-muted-foreground">Crie uma organização em Configurações primeiro.</div>;
 
   return (
-    <div className="space-y-0">
+    <div className="space-y-4">
       <PageHeader
         icon={ActivityIcon}
         kicker="Interações"
@@ -278,8 +278,8 @@ export default function Activities() {
         }
       />
 
-      {/* Type filter tabs */}
-      <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap">
+      {/* Filtros — tipo de atividade + busca + responsável */}
+      <div className="flex items-center gap-1 pb-2 border-b border-border flex-wrap pt-1">
         <button
           onClick={() => setTypeFilter("all")}
           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${typeFilter === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}

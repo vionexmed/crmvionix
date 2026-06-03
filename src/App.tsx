@@ -13,31 +13,60 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
-// Route-based code splitting
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Contacts = lazy(() => import("./pages/Contacts"));
-const Companies = lazy(() => import("./pages/Companies"));
-const Deals = lazy(() => import("./pages/Deals"));
-const DealDetail = lazy(() => import("./pages/DealDetail"));
-const Activities = lazy(() => import("./pages/Activities"));
-const Tasks = lazy(() => import("./pages/Tasks"));
-const Inbox = lazy(() => import("./pages/Inbox"));
-const Conversations = lazy(() => import("./pages/Conversations"));
-const EmailTemplates = lazy(() => import("./pages/EmailTemplates"));
-const EmailSequences = lazy(() => import("./pages/EmailSequences"));
-const LeadScoring = lazy(() => import("./pages/LeadScoring"));
-const Reports = lazy(() => import("./pages/Reports"));
-const Automations = lazy(() => import("./pages/Automations"));
-const Settings = lazy(() => import("./pages/Settings"));
-const Integrations = lazy(() => import("./pages/Integrations"));
-const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
-const SalesGoals = lazy(() => import("./pages/SalesGoals"));
-const Team = lazy(() => import("./pages/Team"));
-const Setup = lazy(() => import("./pages/Setup"));
-const Leads = lazy(() => import("./pages/Leads"));
-const Marketing = lazy(() => import("./pages/Marketing"));
-const MarketingOverview = lazy(() => import("./pages/marketing/Overview"));
-const InboxMarketing = lazy(() => import("./pages/InboxMarketing"));
+/**
+ * Wrapper para lazy() que detecta falha de chunk (erro de MIME type após novo deploy)
+ * e força reload automático para buscar os novos arquivos.
+ */
+function lazyChunk<T extends React.ComponentType<unknown>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(() =>
+    factory().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes("mime") ||
+        msg.includes("MIME") ||
+        msg.includes("Failed to fetch") ||
+        msg.includes("Loading chunk") ||
+        msg.includes("dynamically imported module")
+      ) {
+        // Reload uma vez para pegar os novos chunks do deploy
+        const reloaded = sessionStorage.getItem("chunk_reload");
+        if (!reloaded) {
+          sessionStorage.setItem("chunk_reload", "1");
+          window.location.reload();
+        }
+      }
+      throw err;
+    })
+  );
+}
+
+// Route-based code splitting (lazyChunk auto-reloads on MIME type errors after deploy)
+const Dashboard        = lazyChunk(() => import("./pages/Dashboard"));
+const Contacts         = lazyChunk(() => import("./pages/Contacts"));
+const Companies        = lazyChunk(() => import("./pages/Companies"));
+const Deals            = lazyChunk(() => import("./pages/Deals"));
+const DealDetail       = lazyChunk(() => import("./pages/DealDetail"));
+const Activities       = lazyChunk(() => import("./pages/Activities"));
+const Tasks            = lazyChunk(() => import("./pages/Tasks"));
+const Inbox            = lazyChunk(() => import("./pages/Inbox"));
+const Conversations    = lazyChunk(() => import("./pages/Conversations"));
+const EmailTemplates   = lazyChunk(() => import("./pages/EmailTemplates"));
+const EmailSequences   = lazyChunk(() => import("./pages/EmailSequences"));
+const LeadScoring      = lazyChunk(() => import("./pages/LeadScoring"));
+const Reports          = lazyChunk(() => import("./pages/Reports"));
+const Automations      = lazyChunk(() => import("./pages/Automations"));
+const Settings         = lazyChunk(() => import("./pages/Settings"));
+const Integrations     = lazyChunk(() => import("./pages/Integrations"));
+const SecuritySettings = lazyChunk(() => import("./pages/SecuritySettings"));
+const SalesGoals       = lazyChunk(() => import("./pages/SalesGoals"));
+const Team             = lazyChunk(() => import("./pages/Team"));
+const Setup            = lazyChunk(() => import("./pages/Setup"));
+const Leads            = lazyChunk(() => import("./pages/Leads"));
+const Marketing        = lazyChunk(() => import("./pages/Marketing"));
+const MarketingOverview = lazyChunk(() => import("./pages/marketing/Overview"));
+const InboxMarketing   = lazyChunk(() => import("./pages/InboxMarketing"));
 
 const queryClient = new QueryClient({
   defaultOptions: {

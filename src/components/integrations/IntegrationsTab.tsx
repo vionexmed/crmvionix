@@ -13,6 +13,14 @@ import {
 import {
   MessageSquare, Webhook, Mail, Plus, Loader2, Eye, EyeOff, RefreshCw,
 } from "lucide-react";
+
+function MetaIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
+    </svg>
+  );
+}
 import { useToast } from "@/hooks/use-toast";
 import { LogoUploadField } from "@/components/crm/LogoUploadField";
 import { WhatsAppOfficialCard } from "@/components/crm/WhatsAppOfficialCard";
@@ -41,6 +49,18 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
 
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
+    if (provider === "meta") {
+      const existing = getConfig("meta");
+      if (existing) {
+        await supabase.from("integration_configs").update({ config: editConfig, is_active: true } as any).eq("id", existing.id);
+      } else {
+        await supabase.from("integration_configs").insert({ org_id: orgId, provider: "meta", config: editConfig, is_active: true, connected_by: userId } as any);
+      }
+      toast({ title: "Meta Ads configurado — clique em Sincronizar para importar campanhas" });
+      setEditProvider(null);
+      fetchConfigs();
+      return;
+    }
     if (provider === "gmail") {
       // Save optional credentials, display name and signature fields; OAuth handled by Conectar
       const existing = getConfig("gmail");
@@ -105,6 +125,29 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
     setSlackConnecting(false);
   };
 
+  const [metaConnecting, setMetaConnecting] = useState(false);
+  const handleMetaConnect = async () => {
+    if (!orgId) return;
+    const cfg = getConfig("meta");
+    if (!cfg?.config?.access_token || !cfg?.config?.ad_account_id) {
+      setEditProvider("meta");
+      setEditConfig(cfg?.config || {});
+      return;
+    }
+    setMetaConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("meta-ads-sync", {
+        body: { org_id: orgId },
+      });
+      if (error) throw error;
+      toast({ title: data?.synced ? `Sincronizado — ${data.synced} campanhas importadas` : "Meta Ads conectado" });
+      fetchConfigs();
+    } catch (e: any) {
+      toast({ title: "Erro ao conectar Meta Ads", description: e.message, variant: "destructive" });
+    }
+    setMetaConnecting(false);
+  };
+
   const [gmailConnecting, setGmailConnecting] = useState(false);
   const handleGmailConnect = async () => {
     if (!orgId) return;
@@ -126,6 +169,33 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
   };
 
   const integrations = [
+    {
+      provider: "meta", name: "Meta Ads", icon: MetaIcon,
+      description: "Facebook & Instagram Ads — importe campanhas automaticamente",
+      connectAction: handleMetaConnect,
+      connectLoading: metaConnecting,
+      fields: [
+        {
+          key: "access_token", label: "Access Token", placeholder: "EAAxxxxxx...", type: "secret" as const,
+          helpText: "Gere um token de longa duração em",
+          helpUrl: "https://developers.facebook.com/tools/explorer/",
+          helpLabel: "Meta Graph API Explorer",
+        },
+        {
+          key: "ad_account_id", label: "Ad Account ID", placeholder: "act_123456789",
+          helpText: "Encontre em Business Manager → Contas de Anúncio. Formato: act_XXXXXXX",
+        },
+        {
+          key: "app_id", label: "App ID (opcional)", placeholder: "123456789012345",
+          helpText: "ID do seu Meta App em",
+          helpUrl: "https://developers.facebook.com/apps/",
+          helpLabel: "developers.facebook.com",
+        },
+        {
+          key: "app_secret", label: "App Secret (opcional)", placeholder: "xxxxxxxxxxxxx", type: "secret" as const,
+        },
+      ],
+    },
     {
       provider: "gmail", name: "Gmail", icon: Mail,
       description: "Conecte sua conta Google via OAuth (suas credenciais)",
@@ -195,12 +265,19 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {cfg ? (
                     <>
                       <Badge variant={cfg.is_active ? "default" : "secondary"} className="text-[9px]">
                         {cfg.is_active ? "Conectado" : "Inativo"}
                       </Badge>
+                      {intg.provider === "meta" && cfg.is_active && (
+                        <Button variant="outline" size="sm" className="h-7 text-[10px]"
+                          disabled={metaConnecting}
+                          onClick={handleMetaConnect}>
+                          {metaConnecting ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Sincronizando...</> : <><RefreshCw className="mr-1 h-3 w-3" />Sincronizar</>}
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm" className="ml-auto h-7 text-[10px]"
                         onClick={async () => {
                           setEditProvider(intg.provider);
@@ -250,6 +327,17 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {editProvider === "meta" && (
+              <div className="rounded-md border border-[#1877F2]/30 bg-[#EEF4FF] p-3 text-[11px] text-[#1877F2]">
+                <strong>Como obter o Access Token:</strong>
+                <ol className="mt-1.5 space-y-1 list-decimal list-inside text-[#1877F2]/80">
+                  <li>Acesse o <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener noreferrer" className="underline">Meta Graph API Explorer</a></li>
+                  <li>Selecione sua app e permissões: <code className="bg-white/60 px-1 rounded">ads_read</code> <code className="bg-white/60 px-1 rounded">ads_management</code></li>
+                  <li>Clique em "Gerar token de acesso" e copie aqui</li>
+                  <li>Preencha o Ad Account ID no formato <code className="bg-white/60 px-1 rounded">act_XXXXXXX</code></li>
+                </ol>
+              </div>
+            )}
             {editProvider === "gmail" && (
               <div className="rounded-md border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">
                 Use <strong>Conectar</strong> no card para autorizar via Google OAuth. Os campos abaixo são opcionais — preencha sua assinatura com logo e dados de contato para aparecer em todos os emails enviados.

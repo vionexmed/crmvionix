@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   MessageSquare, Webhook, Mail, Plus, Loader2, Eye, EyeOff, RefreshCw,
+  CheckCircle2, Trash2, AlertCircle,
 } from "lucide-react";
 
 function MetaIcon({ className }: { className?: string }) {
@@ -30,12 +31,18 @@ type IntegrationConfig = {
   connected_at: string | null; connected_by: string | null;
 };
 
+type EmailConnection = {
+  id: string; user_id: string; provider: string; email_address: string | null;
+  label: string; purpose: string; is_active: boolean; created_at: string | null;
+};
+
 export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userId?: string }) {
   const { toast } = useToast();
   const [configs, setConfigs] = useState<IntegrationConfig[]>([]);
   const [editProvider, setEditProvider] = useState<string | null>(null);
   const [editConfig, setEditConfig] = useState<any>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [emailConnections, setEmailConnections] = useState<EmailConnection[]>([]);
 
   const fetchConfigs = useCallback(async () => {
     if (!orgId) return;
@@ -43,12 +50,34 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
     setConfigs(data || []);
   }, [orgId]);
 
-  useEffect(() => { fetchConfigs(); }, [fetchConfigs]);
+  const fetchEmailConnections = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("email_connections")
+      .select("id, user_id, provider, email_address, label, purpose, is_active, created_at")
+      .eq("user_id", userId) as any;
+    setEmailConnections(data || []);
+  }, [userId]);
+
+  useEffect(() => { fetchConfigs(); fetchEmailConnections(); }, [fetchConfigs, fetchEmailConnections]);
 
   const getConfig = (provider: string) => configs.find((c) => c.provider === provider);
 
   const saveConfig = async (provider: string) => {
     if (!orgId) return;
+    // gmail_credentials salva como provider "gmail" no banco
+    if (provider === "gmail_credentials") {
+      const existing = getConfig("gmail") || getConfig("gmail_credentials");
+      if (existing) {
+        await supabase.from("integration_configs").update({ config: editConfig } as any).eq("id", existing.id);
+      } else {
+        await supabase.from("integration_configs").insert({ org_id: orgId, provider: "gmail", config: editConfig, connected_by: userId } as any);
+      }
+      toast({ title: "Credenciais Gmail salvas — agora você pode conectar as contas" });
+      setEditProvider(null);
+      fetchConfigs();
+      return;
+    }
     if (provider === "meta") {
       const existing = getConfig("meta");
       if (existing) {
@@ -148,24 +177,59 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
     setMetaConnecting(false);
   };
 
-  const [gmailConnecting, setGmailConnecting] = useState(false);
-  const handleGmailConnect = async () => {
+  const [gmailConnecting, setGmailConnecting] = useState<string | null>(null);
+  const handleGmailConnect = async (purpose: "sales" | "marketing", label: string) => {
     if (!orgId) return;
-    setGmailConnecting(true);
+    setGmailConnecting(purpose);
     try {
       const { data, error } = await supabase.functions.invoke("gmail-oauth-start", {
-        body: { org_id: orgId, return_to: `${window.location.origin}/settings/integrations` },
+        body: {
+          org_id: orgId,
+          return_to: `${window.location.origin}/settings/integrations`,
+          purpose,
+          label,
+        },
       });
-      if (error || !data?.url) {
-        toast({ title: "Falha ao iniciar OAuth", description: data?.error || error?.message || "Erro desconhecido", variant: "destructive" });
-        setGmailConnecting(false);
+
+      // supabase.functions.invoke retorna data=null em erros 4xx/5xx
+      // A mensagem real está em error.context — vamos tentar extraí-la
+      if (error) {
+        let detail = error.message || "Erro desconhecido";
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) detail = body.error;
+        } catch { /* ignore */ }
+
+        if (detail.includes("Client ID") || detail.includes("OAuth")) {
+          toast({
+            title: "Google OAuth não configurado",
+            description: "Configure o Client ID e Client Secret do Google em Integrações → Gmail antes de conectar.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Falha ao iniciar OAuth", description: detail, variant: "destructive" });
+        }
+        setGmailConnecting(null);
         return;
       }
+
+      if (!data?.url) {
+        toast({ title: "Falha ao iniciar OAuth", description: "URL de autorização não recebida.", variant: "destructive" });
+        setGmailConnecting(null);
+        return;
+      }
+
       window.location.href = data.url;
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
-      setGmailConnecting(false);
+      setGmailConnecting(null);
     }
+  };
+
+  const handleDisconnectGmail = async (connectionId: string) => {
+    await supabase.from("email_connections").delete().eq("id", connectionId);
+    fetchEmailConnections();
+    toast({ title: "Conta Gmail desconectada" });
   };
 
   const integrations = [
@@ -198,10 +262,8 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
       ],
     },
     {
-      provider: "gmail", name: "Gmail", icon: Mail,
-      description: "Conecte sua conta Google via OAuth (suas credenciais)",
-      connectAction: handleGmailConnect,
-      connectLoading: gmailConnecting,
+      provider: "gmail_credentials", name: "Gmail — Credenciais OAuth", icon: Mail,
+      description: "Configure Client ID e Client Secret para conectar contas Gmail",
       fields: [
         { key: "client_id", label: "Google OAuth Client ID", placeholder: "xxxxxxx.apps.googleusercontent.com", type: "secret" as const,
           helpText: "Crie credenciais OAuth 2.0 em",
@@ -242,10 +304,104 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
     },
   ];
 
+  const GMAIL_ACCOUNTS: { purpose: "sales" | "marketing"; label: string; description: string; route: string }[] = [
+    { purpose: "sales",     label: "Email Atendimento", description: "Email de contato e suporte — aparece em Caixa de Entrada",    route: "/inbox" },
+    { purpose: "marketing", label: "Email Marketing",   description: "Email de campanhas e marketing — aparece em Email Marketing", route: "/marketing/inbox" },
+  ];
+
+  const gmailCredentials = getConfig("gmail") || getConfig("gmail_credentials");
+  const hasGmailCredentials = !!(gmailCredentials?.config?.client_id && gmailCredentials?.config?.client_secret);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
         <WhatsAppOfficialCard />
+
+        {/* ── Card Gmail multi-conta ─────────────────── */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <Mail className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-sm">Gmail — 2 contas</CardTitle>
+                <CardDescription className="text-[10px]">Uma conta para atendimento e outra para marketing</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!hasGmailCredentials && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-700 dark:text-amber-400">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>Configure o <strong>Google OAuth Client ID e Secret</strong> antes de conectar as contas. Use o botão <strong>Configurar credenciais</strong> abaixo.</span>
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {GMAIL_ACCOUNTS.map(({ purpose, label, description }) => {
+                const conn = emailConnections.find((c) => c.purpose === purpose && c.provider === "gmail");
+                const isConnecting = gmailConnecting === purpose;
+                return (
+                  <div key={purpose} className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[12px] font-semibold">{label}</p>
+                        <p className="text-[10px] text-muted-foreground leading-tight">{description}</p>
+                      </div>
+                      {conn ? (
+                        <button
+                          onClick={() => handleDisconnectGmail(conn.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          title="Desconectar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                    {conn ? (
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3 w-3 text-success" />
+                        <span className="text-[11px] text-success font-medium truncate">{conn.email_address || "Conectado"}</span>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="h-7 text-[10px] w-full"
+                        disabled={isConnecting || !hasGmailCredentials}
+                        onClick={() => handleGmailConnect(purpose, label)}
+                        title={!hasGmailCredentials ? "Configure as credenciais OAuth primeiro" : ""}
+                      >
+                        {isConnecting ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Conectando...</> : <><Plus className="mr-1 h-3 w-3" />Conectar conta</>}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px]"
+                onClick={async () => {
+                  const provider = "gmail_credentials";
+                  setEditProvider(provider);
+                  let base = gmailCredentials?.config || {};
+                  try {
+                    const { data } = await supabase.functions.invoke("gmail-get-defaults");
+                    if (data) base = { client_id: base.client_id || data.client_id, client_secret: base.client_secret || data.client_secret, ...base };
+                  } catch { /* ignore */ }
+                  setEditConfig(base);
+                }}
+              >
+                Configurar credenciais OAuth
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {integrations.map((intg) => {
           const cfg = getConfig(intg.provider);
           const Icon = intg.icon;

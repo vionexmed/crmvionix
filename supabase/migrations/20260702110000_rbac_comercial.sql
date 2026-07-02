@@ -117,6 +117,8 @@ CREATE POLICY "sales_goals_delete" ON public.sales_goals FOR DELETE
   USING (user_belongs_to_org(auth.uid(), org_id) AND is_org_admin(auth.uid(), org_id));
 
 -- ---------- 7. Catálogo: leitura para toda a org, escrita admin ----------
+-- Tabelas que não existirem neste banco são puladas (schemas remotos podem
+-- estar em versões diferentes das migrations do repositório).
 DO $$
 DECLARE t text;
 BEGIN
@@ -124,6 +126,10 @@ BEGIN
     'pipelines','pipeline_stages','tags','loss_reasons',
     'custom_field_definitions','email_templates','segments'
   ] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN
+      RAISE NOTICE 'Tabela public.% não existe — pulando', t;
+      CONTINUE;
+    END IF;
     EXECUTE format('CREATE POLICY "%s_select" ON public.%I FOR SELECT USING (user_belongs_to_org(auth.uid(), org_id))', t, t);
     EXECUTE format('CREATE POLICY "%s_insert" ON public.%I FOR INSERT WITH CHECK (user_belongs_to_org(auth.uid(), org_id) AND is_org_admin(auth.uid(), org_id))', t, t);
     EXECUTE format('CREATE POLICY "%s_update" ON public.%I FOR UPDATE USING (user_belongs_to_org(auth.uid(), org_id) AND is_org_admin(auth.uid(), org_id))', t, t);
@@ -143,6 +149,10 @@ BEGIN
     'whatsapp_quick_actions','whatsapp_conversations','whatsapp_messages','whatsapp_instance_secrets',
     'email_sequences','email_sequence_steps','lead_scoring_rules','risk_rules','lead_score_history'
   ] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN
+      RAISE NOTICE 'Tabela public.% não existe — pulando', t;
+      CONTINUE;
+    END IF;
     EXECUTE format('CREATE POLICY "%s_admin_all" ON public.%I FOR ALL USING (user_belongs_to_org(auth.uid(), org_id) AND is_org_admin(auth.uid(), org_id)) WITH CHECK (user_belongs_to_org(auth.uid(), org_id) AND is_org_admin(auth.uid(), org_id))', t, t);
   END LOOP;
 END $$;

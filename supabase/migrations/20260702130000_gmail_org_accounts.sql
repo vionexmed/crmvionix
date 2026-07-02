@@ -13,6 +13,18 @@
 --  * emails.synced_from (conta de origem) é retro-preenchido nos enviados.
 -- =============================================================
 
+-- ---------- 0. Helper (idempotente — também criado na migration de RBAC) ----------
+CREATE OR REPLACE FUNCTION public.is_org_admin(_user_id uuid, _org_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id AND org_id = _org_id AND role IN ('owner','admin')
+  );
+$$;
+
 -- ---------- 1. Novas colunas por conta ----------
 ALTER TABLE public.email_connections
   ADD COLUMN IF NOT EXISTS from_name text,
@@ -80,8 +92,16 @@ CREATE POLICY "email_connections_delete" ON public.email_connections FOR DELETE
 
 -- Tokens: NENHUMA política para clientes. RLS ligado sem política = negado.
 -- Somente as edge functions (service role, que ignora RLS) acessam.
-ALTER TABLE public.gmail_oauth_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.google_oauth_tokens ENABLE ROW LEVEL SECURITY;
+-- (guardado: essas tabelas podem não existir em bancos mais antigos)
+DO $$
+BEGIN
+  IF to_regclass('public.gmail_oauth_tokens') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.gmail_oauth_tokens ENABLE ROW LEVEL SECURITY';
+  END IF;
+  IF to_regclass('public.google_oauth_tokens') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.google_oauth_tokens ENABLE ROW LEVEL SECURITY';
+  END IF;
+END $$;
 
 -- ---------- 4. Backfill de synced_from nos e-mails enviados ----------
 UPDATE public.emails

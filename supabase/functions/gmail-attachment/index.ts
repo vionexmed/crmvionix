@@ -6,9 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function refreshAccessToken(refreshToken: string) {
-  const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")!;
+// Refresh com as MESMAS credenciais que emitiram o token (BYOK ou env)
+async function refreshAccessToken(refreshToken: string, cfg: Record<string, unknown> = {}) {
+  const clientId = (cfg.client_id as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID")!;
+  const clientSecret = (cfg.client_secret as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")!;
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -61,30 +62,55 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Find a Gmail token (any user in same org would work; prefer current user)
-    let { data: tokenRow } = await supabaseAdmin
-      .from("gmail_oauth_tokens")
-      .select("*")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
+    const { data: prof } = await supabaseAdmin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
+    const orgId = prof?.org_id;
+    if (!orgId) {
+      return new Response(JSON.stringify({ error: "No organization" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Credenciais BYOK da org (para refresh do token com o client correto)
+    const { data: cfgRow } = await supabaseAdmin
+      .from("integration_configs")
+      .select("config")
+      .eq("org_id", orgId)
+      .eq("provider", "gmail")
+      .maybeSingle();
+    const cfg: Record<string, unknown> = (cfgRow?.config as Record<string, unknown>) ?? {};
+
+    // O anexo pertence à conta que sincronizou a mensagem (synced_from) —
+    // usa o token DAQUELA conta, não o mais recente
+    const { data: emailRow } = await supabaseAdmin
+      .from("emails")
+      .select("synced_from")
+      .eq("org_id", orgId)
+      .eq("message_id", message_id)
       .limit(1)
       .maybeSingle();
 
+    let tokenRow: any = null;
+    if (emailRow?.synced_from) {
+      const { data: t } = await supabaseAdmin
+        .from("gmail_oauth_tokens")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("email", emailRow.synced_from)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      tokenRow = t;
+    }
     if (!tokenRow) {
-      // fall back to any token in user's org
-      const { data: prof } = await supabaseAdmin.from("profiles").select("org_id").eq("id", userId).maybeSingle();
-      if (prof?.org_id) {
-        const { data: ids } = await supabaseAdmin.from("profiles").select("id").eq("org_id", prof.org_id);
-        const userIds = (ids || []).map((p: any) => p.id);
-        const { data: anyTok } = await supabaseAdmin
-          .from("gmail_oauth_tokens")
-          .select("*")
-          .in("user_id", userIds)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        tokenRow = anyTok as any;
-      }
+      // fallback: qualquer token da org (mensagens antigas sem synced_from)
+      const { data: anyTok } = await supabaseAdmin
+        .from("gmail_oauth_tokens")
+        .select("*")
+        .eq("org_id", orgId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      tokenRow = anyTok;
     }
 
     if (!tokenRow) {
@@ -95,7 +121,7 @@ serve(async (req) => {
 
     let accessToken = tokenRow.access_token as string;
     if (new Date(tokenRow.expires_at).getTime() - Date.now() < 60_000) {
-      const refreshed = await refreshAccessToken(tokenRow.refresh_token as string);
+      const refreshed = await refreshAccessToken(tokenRow.refresh_token as string, cfg);
       accessToken = refreshed.access_token;
       await supabaseAdmin.from("gmail_oauth_tokens").update({
         access_token: accessToken,

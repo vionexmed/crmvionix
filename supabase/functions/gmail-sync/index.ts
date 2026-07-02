@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
+const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 
 function decodeBase64Url(s: string): string {
   try {
@@ -81,7 +82,7 @@ function parseSingleAddr(s: string | null): string | null {
   return (m ? m[1] : s).trim();
 }
 
-async function gmailFetch(path: string, key: string, lovable: string) {
+async function connectorFetch(path: string, key: string, lovable: string) {
   const res = await fetch(`${GATEWAY_URL}${path}`, {
     headers: {
       Authorization: `Bearer ${lovable}`,
@@ -91,6 +92,120 @@ async function gmailFetch(path: string, key: string, lovable: string) {
   const data = await res.json();
   if (!res.ok) throw new Error(`Gmail ${path} ${res.status}: ${JSON.stringify(data)}`);
   return data;
+}
+
+async function oauthFetch(path: string, accessToken: string) {
+  const res = await fetch(`${GMAIL_API}${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Gmail ${path} ${res.status}: ${JSON.stringify(data)}`);
+  return data;
+}
+
+// O refresh usa as MESMAS credenciais que emitiram o token (BYOK da org
+// quando houver, senão as do ambiente) — senão o Google dá invalid_client.
+async function refreshAccessToken(refreshToken: string, cfg: Record<string, unknown> = {}) {
+  const clientId = (cfg.client_id as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID")!;
+  const clientSecret = (cfg.client_secret as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")!;
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`refresh failed: ${JSON.stringify(data)}`);
+  return data as { access_token: string; expires_in: number };
+}
+
+type GmailMessageFetcher = (path: string) => Promise<any>;
+
+/**
+ * Sincroniza uma lista de mensagens do Gmail para a tabela emails.
+ * `syncedFrom` marca de qual conta da empresa o e-mail veio — é isso
+ * que separa a inbox Comercial da inbox Marketing.
+ */
+async function syncMessages(opts: {
+  supabaseAdmin: any;
+  orgId: string;
+  fetcher: GmailMessageFetcher;
+  max: number;
+  syncedFrom: string | null;
+  query?: string;
+}): Promise<number> {
+  const { supabaseAdmin, orgId, fetcher, max, syncedFrom, query } = opts;
+
+  const qs = new URLSearchParams({ maxResults: String(Math.min(max, 100)), labelIds: "INBOX" });
+  if (query) qs.set("q", query);
+  const list = await fetcher(`/users/me/messages?${qs.toString()}`);
+  const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
+  if (ids.length === 0) return 0;
+
+  // Skip ones we already have
+  const { data: existing } = await supabaseAdmin
+    .from("emails")
+    .select("message_id")
+    .eq("org_id", orgId)
+    .in("message_id", ids);
+  const have = new Set((existing ?? []).map((e: any) => e.message_id));
+  const toFetch = ids.filter((id) => !have.has(id));
+
+  let synced = 0;
+  for (const id of toFetch) {
+    try {
+      const msg = await fetcher(`/users/me/messages/${id}?format=full`);
+      const headers = msg.payload?.headers ?? [];
+      const subject = getHeader(headers, "Subject");
+      const fromEmail = parseSingleAddr(getHeader(headers, "From"));
+      const toEmails = parseAddrList(getHeader(headers, "To"));
+      const ccEmails = parseAddrList(getHeader(headers, "Cc"));
+      const dateHeader = getHeader(headers, "Date");
+      const sentAt = dateHeader ? new Date(dateHeader).toISOString() : new Date(Number(msg.internalDate)).toISOString();
+      const { html, text } = extractBody(msg.payload);
+      const attachments = extractAttachments(msg.payload);
+      const isUnread = (msg.labelIds ?? []).includes("UNREAD");
+
+      // Try to match contact by from_email
+      let contactId: string | null = null;
+      if (fromEmail) {
+        const { data: c } = await supabaseAdmin
+          .from("contacts")
+          .select("id")
+          .eq("org_id", orgId)
+          .ilike("email", fromEmail)
+          .maybeSingle();
+        contactId = c?.id ?? null;
+      }
+
+      await supabaseAdmin.from("emails").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        direction: "inbound",
+        subject: subject || "(sem assunto)",
+        body_html: html || `<pre style="white-space:pre-wrap;font-family:inherit">${(text || "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))}</pre>`,
+        from_email: fromEmail,
+        to_emails: toEmails,
+        cc_emails: ccEmails,
+        status: "received",
+        provider: "gmail",
+        message_id: id,
+        thread_id: msg.threadId ?? null,
+        is_read: !isUnread,
+        sent_at: sentAt,
+        attachments,
+        synced_from: syncedFrom,
+      });
+      synced++;
+    } catch (e) {
+      console.error("sync msg fail", id, e);
+    }
+  }
+  return synced;
 }
 
 serve(async (req) => {
@@ -116,16 +231,7 @@ serve(async (req) => {
       });
     }
 
-    const { max = 25 } = await req.json().catch(() => ({}));
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY");
-    if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
-      return new Response(JSON.stringify({ error: "gmail_not_linked" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { max = 25, purpose } = await req.json().catch(() => ({}));
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -142,92 +248,114 @@ serve(async (req) => {
       });
     }
 
-    const { data: cfg } = await supabaseAdmin
+    const { data: cfgRow } = await supabaseAdmin
       .from("integration_configs")
       .select("config, is_active")
       .eq("org_id", org_id)
       .eq("provider", "gmail")
       .maybeSingle();
+    const cfg: any = cfgRow?.config ?? {};
+    const mode: string = cfg.mode || "oauth_byok";
 
-    if (!cfg || !cfg.is_active) {
-      return new Response(JSON.stringify({ error: "gmail_not_configured" }), {
-        status: 400,
+    // ── Modo legado: conector Lovable (uma caixa única do projeto) ──
+    if (mode === "connector") {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      const GOOGLE_MAIL_API_KEY = Deno.env.get("GOOGLE_MAIL_API_KEY");
+      if (!LOVABLE_API_KEY || !GOOGLE_MAIL_API_KEY) {
+        return new Response(JSON.stringify({ error: "gmail_not_linked" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const synced = await syncMessages({
+        supabaseAdmin,
+        orgId: org_id,
+        fetcher: (path) => connectorFetch(path, GOOGLE_MAIL_API_KEY, LOVABLE_API_KEY),
+        max: Number(max) || 25,
+        syncedFrom: cfg.email ?? null,
+      });
+      return new Response(JSON.stringify({ ok: true, synced }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // List inbox messages
-    const list = await gmailFetch(
-      `/users/me/messages?maxResults=${Math.min(Number(max) || 25, 100)}&labelIds=INBOX`,
-      GOOGLE_MAIL_API_KEY, LOVABLE_API_KEY,
-    );
-    const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
-    if (ids.length === 0) {
-      return new Response(JSON.stringify({ ok: true, synced: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Skip ones we already have
-    const { data: existing } = await supabaseAdmin
-      .from("emails")
-      .select("message_id")
+    // ── Modo OAuth: sincroniza as contas da EMPRESA (comercial/marketing) ──
+    let connQuery = supabaseAdmin
+      .from("email_connections")
+      .select("*")
       .eq("org_id", org_id)
-      .in("message_id", ids);
-    const have = new Set((existing ?? []).map((e: any) => e.message_id));
-    const toFetch = ids.filter((id) => !have.has(id));
+      .eq("provider", "gmail")
+      .eq("is_active", true);
+    if (purpose === "sales" || purpose === "marketing") {
+      connQuery = connQuery.eq("purpose", purpose);
+    }
+    const { data: connections } = await connQuery;
 
-    let synced = 0;
-    for (const id of toFetch) {
+    if (!connections || connections.length === 0) {
+      return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Nenhuma conta Gmail da empresa conectada. Conecte em Integrações." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    let totalSynced = 0;
+    const perAccount: Record<string, number | string> = {};
+
+    for (const conn of connections) {
       try {
-        const msg = await gmailFetch(`/users/me/messages/${id}?format=full`, GOOGLE_MAIL_API_KEY, LOVABLE_API_KEY);
-        const headers = msg.payload?.headers ?? [];
-        const subject = getHeader(headers, "Subject");
-        const fromEmail = parseSingleAddr(getHeader(headers, "From"));
-        const toEmails = parseAddrList(getHeader(headers, "To"));
-        const ccEmails = parseAddrList(getHeader(headers, "Cc"));
-        const dateHeader = getHeader(headers, "Date");
-        const sentAt = dateHeader ? new Date(dateHeader).toISOString() : new Date(Number(msg.internalDate)).toISOString();
-        const { html, text } = extractBody(msg.payload);
-        const attachments = extractAttachments(msg.payload);
-        const isUnread = (msg.labelIds ?? []).includes("UNREAD");
-
-        // Try to match contact by from_email
-        let contactId: string | null = null;
-        if (fromEmail) {
-          const { data: c } = await supabaseAdmin
-            .from("contacts")
-            .select("id")
-            .eq("org_id", org_id)
-            .ilike("email", fromEmail)
-            .maybeSingle();
-          contactId = c?.id ?? null;
+        const { data: tokenRow } = await supabaseAdmin
+          .from("gmail_oauth_tokens")
+          .select("*")
+          .eq("org_id", org_id)
+          .eq("email", conn.email_address)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!tokenRow) {
+          perAccount[conn.email_address] = "token_missing";
+          continue;
         }
 
-        await supabaseAdmin.from("emails").insert({
-          org_id,
-          contact_id: contactId,
-          direction: "inbound",
-          subject: subject || "(sem assunto)",
-          body_html: html || `<pre style="white-space:pre-wrap;font-family:inherit">${(text || "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))}</pre>`,
-          from_email: fromEmail,
-          to_emails: toEmails,
-          cc_emails: ccEmails,
-          status: "received",
-          provider: "gmail",
-          message_id: id,
-          thread_id: msg.threadId ?? null,
-          is_read: !isUnread,
-          sent_at: sentAt,
-          attachments,
+        let accessToken = tokenRow.access_token as string;
+        if (new Date(tokenRow.expires_at).getTime() - Date.now() < 60_000) {
+          const refreshed = await refreshAccessToken(tokenRow.refresh_token as string, cfg);
+          accessToken = refreshed.access_token;
+          await supabaseAdmin.from("gmail_oauth_tokens").update({
+            access_token: accessToken,
+            expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", tokenRow.id);
+        }
+
+        // Sync incremental: busca a partir do último sync (margem de 1 dia
+        // para cobrir atrasos de entrega); primeira vez = janela padrão do max
+        let query: string | undefined;
+        if (conn.last_synced_at) {
+          const afterUnix = Math.floor((new Date(conn.last_synced_at).getTime() - 86_400_000) / 1000);
+          query = `after:${afterUnix}`;
+        }
+
+        const synced = await syncMessages({
+          supabaseAdmin,
+          orgId: org_id,
+          fetcher: (path) => oauthFetch(path, accessToken),
+          max: Number(max) || 25,
+          syncedFrom: conn.email_address,
+          query,
         });
-        synced++;
+
+        await supabaseAdmin
+          .from("email_connections")
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq("id", conn.id);
+
+        perAccount[conn.email_address] = synced;
+        totalSynced += synced;
       } catch (e) {
-        console.error("sync msg fail", id, e);
+        console.error("account sync fail", conn.email_address, e);
+        perAccount[conn.email_address] = `error: ${(e as Error).message}`;
       }
     }
 
-    return new Response(JSON.stringify({ ok: true, synced, total_listed: ids.length }), {
+    return new Response(JSON.stringify({ ok: true, synced: totalSynced, accounts: perAccount }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

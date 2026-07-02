@@ -27,10 +27,13 @@ function DealCard({
   stageColor?: string;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: deal.id });
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50, borderLeftColor: stageColor || "hsl(var(--primary))" }
-    : { borderLeftColor: stageColor || "hsl(var(--primary))" };
+  // O clone visual do drag é o DragOverlay — o card original só fica translúcido
+  // (aplicar transform aqui fazia DOIS cards se moverem ao mesmo tempo)
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id });
+  const style = {
+    borderLeftColor: stageColor || "hsl(var(--primary))",
+    ...(isDragging ? { opacity: 0.4 } : {}),
+  };
 
   const subtitleParts: string[] = [];
   if (deal.company) subtitleParts.push(deal.company.name);

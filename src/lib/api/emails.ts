@@ -29,6 +29,8 @@ export type Email = {
   is_spam?: boolean;
   is_trashed?: boolean;
   importance?: string | null;
+  /** Conta da empresa de onde o e-mail veio/saiu (separa comercial × marketing) */
+  synced_from?: string | null;
   sent_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -70,6 +72,33 @@ export const emailsApi = {
   batchUpdate: async (ids: string[], patch: Partial<Email>): Promise<void> => {
     const { error } = await supabase.from("emails").update(patch as any).in("id", ids);
     if (error) throw error;
+  },
+};
+
+export type EmailConnection = {
+  id: string;
+  org_id: string;
+  user_id: string;
+  provider: string;
+  email_address: string;
+  label?: string | null;
+  purpose?: string | null;
+  from_name?: string | null;
+  signature_html?: string | null;
+  last_synced_at?: string | null;
+  is_active: boolean | null;
+  connected_at: string | null;
+};
+
+export const emailConnectionsApi = {
+  list: async (orgId: string): Promise<EmailConnection[]> => {
+    const { data, error } = await supabase
+      .from("email_connections")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("is_active", true);
+    if (error) throw error;
+    return (data as unknown as EmailConnection[]) ?? [];
   },
 };
 

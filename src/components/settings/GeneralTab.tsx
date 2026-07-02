@@ -34,7 +34,7 @@ export function GeneralTab({ orgId, userId, profile }: { orgId: string | null; u
 
   useEffect(() => {
     if (orgId) {
-      supabase.from("organizations").select("*").eq("id", orgId).single().then(({ data }) => {
+      supabase.from("organizations").select("*").eq("id", orgId).maybeSingle().then(({ data }) => {
         if (data) {
           const settings = (data.settings as Record<string, unknown>) || {};
           setOrgSettings(settings);

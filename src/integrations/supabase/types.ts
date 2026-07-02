@@ -626,28 +626,43 @@ export type Database = {
         Row: {
           connected_at: string | null
           email_address: string
+          from_name: string | null
           id: string
           is_active: boolean | null
+          label: string
+          last_synced_at: string | null
           org_id: string
           provider: string
+          purpose: string
+          signature_html: string | null
           user_id: string
         }
         Insert: {
           connected_at?: string | null
           email_address: string
+          from_name?: string | null
           id?: string
           is_active?: boolean | null
+          label?: string
+          last_synced_at?: string | null
           org_id: string
           provider: string
+          purpose?: string
+          signature_html?: string | null
           user_id: string
         }
         Update: {
           connected_at?: string | null
           email_address?: string
+          from_name?: string | null
           id?: string
           is_active?: boolean | null
+          label?: string
+          last_synced_at?: string | null
           org_id?: string
           provider?: string
+          purpose?: string
+          signature_html?: string | null
           user_id?: string
         }
         Relationships: [
@@ -932,6 +947,7 @@ export type Database = {
           snoozed_until: string | null
           status: string
           subject: string | null
+          synced_from: string | null
           thread_id: string | null
           to_emails: Json | null
           updated_at: string | null
@@ -966,6 +982,7 @@ export type Database = {
           snoozed_until?: string | null
           status?: string
           subject?: string | null
+          synced_from?: string | null
           thread_id?: string | null
           to_emails?: Json | null
           updated_at?: string | null
@@ -1000,6 +1017,7 @@ export type Database = {
           snoozed_until?: string | null
           status?: string
           subject?: string | null
+          synced_from?: string | null
           thread_id?: string | null
           to_emails?: Json | null
           updated_at?: string | null
@@ -2439,6 +2457,14 @@ export type Database = {
       initialize_org_owner: {
         Args: { p_org_id: string; p_user_id: string }
         Returns: undefined
+      }
+      is_org_admin: {
+        Args: { _org_id: string; _user_id: string }
+        Returns: boolean
+      }
+      qualify_lead: {
+        Args: { p_contact_id: string; p_pipeline_id: string }
+        Returns: string
       }
       user_belongs_to_org: {
         Args: { _org_id: string; _user_id: string }

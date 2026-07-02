@@ -64,9 +64,12 @@ function encodeRaw(opts: { to: string; from: string; cc?: string; bcc?: string; 
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function refreshAccessToken(refreshToken: string) {
-  const clientId = Deno.env.get("GOOGLE_OAUTH_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")!;
+// IMPORTANTE: o refresh precisa usar as MESMAS credenciais que emitiram o
+// token (BYOK da org quando houver, senão as do ambiente) — senão o Google
+// responde invalid_client.
+async function refreshAccessToken(refreshToken: string, cfg: Record<string, unknown> = {}) {
+  const clientId = (cfg.client_id as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_ID")!;
+  const clientSecret = (cfg.client_secret as string) || Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET")!;
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -109,6 +112,7 @@ serve(async (req) => {
 
     const body = await req.json();
     const { contact_id, deal_id, to, cc, bcc, subject, html, text } = body;
+    let purpose: string = body.purpose === "marketing" ? "marketing" : "sales";
     if (!to || !subject || (!html && !text)) {
       return new Response(JSON.stringify({ error: "to, subject and html/text required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -130,6 +134,12 @@ serve(async (req) => {
       });
     }
 
+    // Comercial (member) só envia pela conta comercial da empresa
+    const { data: roleRow } = await supabaseAdmin
+      .from("user_roles").select("role").eq("user_id", userId).eq("org_id", org_id).maybeSingle();
+    const isAdmin = roleRow?.role === "owner" || roleRow?.role === "admin";
+    if (!isAdmin) purpose = "sales";
+
 
     // Load integration config first to decide auth mode (connector vs oauth_byok)
     const { data: cfgRow } = await supabaseAdmin
@@ -146,6 +156,7 @@ serve(async (req) => {
     let useConnector = false;
     let connectorApiKey = "";
     let lovableApiKey = "";
+    let connection: any = null;
 
     if (mode === "connector") {
       connectorApiKey = Deno.env.get("GOOGLE_MAIL_API_KEY") ?? "";
@@ -158,23 +169,43 @@ serve(async (req) => {
       useConnector = true;
       fromEmail = cfg.email || "";
     } else {
+      // Conta da EMPRESA pela finalidade (sales = comercial, marketing)
+      const { data: conn } = await supabaseAdmin
+        .from("email_connections")
+        .select("*")
+        .eq("org_id", org_id)
+        .eq("provider", "gmail")
+        .eq("purpose", purpose)
+        .eq("is_active", true)
+        .maybeSingle();
+      connection = conn;
+
+      if (!connection) {
+        const label = purpose === "marketing" ? "Marketing" : "Comercial";
+        return new Response(JSON.stringify({ error: "gmail_not_connected", message: `A conta Gmail ${label} da empresa não está conectada. Peça a um administrador para conectá-la em Integrações.` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Token da conta da org (conectado por qualquer admin)
       const { data: tokenRow } = await supabaseAdmin
         .from("gmail_oauth_tokens")
         .select("*")
-        .eq("user_id", userId)
+        .eq("org_id", org_id)
+        .eq("email", connection.email_address)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (!tokenRow) {
-        return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Conecte sua conta Gmail em Integrações." }), {
+        return new Response(JSON.stringify({ error: "gmail_not_connected", message: "Token da conta não encontrado. Reconecte a conta em Integrações." }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       accessToken = tokenRow.access_token as string;
       if (new Date(tokenRow.expires_at).getTime() - Date.now() < 60_000) {
-        const refreshed = await refreshAccessToken(tokenRow.refresh_token as string);
+        const refreshed = await refreshAccessToken(tokenRow.refresh_token as string, cfg);
         accessToken = refreshed.access_token;
         await supabaseAdmin.from("gmail_oauth_tokens").update({
           access_token: accessToken,
@@ -185,7 +216,8 @@ serve(async (req) => {
       fromEmail = tokenRow.email as string;
     }
 
-    const from = cfg.from_name ? `${cfg.from_name} <${fromEmail}>` : fromEmail;
+    const fromName = connection?.from_name || cfg.from_name || "";
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
     // Fallback: per-user default signature stored in email_signatures
     const { data: sigRow } = await supabaseAdmin
@@ -198,6 +230,8 @@ serve(async (req) => {
 
     const escapeHtml = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;" }[c] as string));
     const buildSignatureHtml = (): string => {
+      // Assinatura por CONTA tem prioridade sobre a assinatura da org
+      if (connection?.signature_html) return `<br/><br/>${connection.signature_html}`;
       const hasStructured = cfg.signature_name || cfg.signature_role || cfg.signature_company || cfg.signature_phone || cfg.signature_email || cfg.signature_website || cfg.signature_logo_url || cfg.signature_extra;
       if (hasStructured) {
         const accent = "#2563eb";
@@ -297,6 +331,7 @@ serve(async (req) => {
       thread_id: sendData.threadId ?? null,
       message_id: sendData.id ?? null,
       is_read: true,
+      synced_from: fromEmail, // conta de origem — separa as inboxes comercial/marketing
     }).select("id").maybeSingle();
 
     return new Response(JSON.stringify({ ok: true, id: sendData.id, threadId: sendData.threadId, email_id: inserted?.id }), {

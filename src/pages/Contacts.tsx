@@ -6,9 +6,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useContacts, useLastActivities, useDeleteContacts,
+  useContacts, useAllContacts, useLastActivities, useDeleteContacts,
   useUpdateContactsStatus, useUpdateContactOwner, contactsKeys,
 } from "@/hooks/queries/useContacts";
+import { contactsApi } from "@/lib/api/contacts";
+import { useAuth } from "@/contexts/AuthContext";
 import { useCompanies } from "@/hooks/queries/useCompanies";
 import { useMembers } from "@/hooks/queries/useMembers";
 import { PAGE_SIZE } from "@/lib/api/contacts";
@@ -64,6 +66,7 @@ interface ContactFilters {
 
 export default function Contacts() {
   const { orgId } = useOrg();
+  const { isAdmin } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -87,6 +90,10 @@ export default function Contacts() {
   // Reset to page 0 when filters/search/sort change
   useEffect(() => { setPage(0); }, [debouncedSearch, filters, sortKey, sortDir]);
 
+  // Seleção não pode sobreviver a mudança de página/filtro/busca —
+  // senão ações em lote atingem linhas que o usuário não está mais vendo
+  useEffect(() => { setSelectedContacts(new Set()); }, [page, debouncedSearch, filters]);
+
   useEffect(() => {
     if (searchParams.get("action") === "new") {
       setCreateOpen(true);
@@ -108,6 +115,12 @@ export default function Contacts() {
   const contacts = result?.data ?? [];
   const totalCount = result?.count ?? 0;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  // Kanban por vendedor precisa de TODOS os contatos, não só a página atual
+  const { data: allContactsForKanban = [] } = useAllContacts(
+    { search: debouncedSearch || undefined, ...filters },
+    viewMode === "owner"
+  );
 
   // Supporting data (small datasets, cached separately)
   const { data: companies = [] } = useCompanies();
@@ -143,8 +156,12 @@ export default function Contacts() {
   };
 
   const handleOwnerChange = async (contactId: string, newOwnerId: string | null) => {
-    await updateOwner({ id: contactId, ownerId: newOwnerId });
-    toast({ title: newOwnerId ? "Responsável atribuído" : "Responsável removido" });
+    try {
+      await updateOwner({ id: contactId, ownerId: newOwnerId });
+      toast({ title: newOwnerId ? "Responsável atribuído" : "Responsável removido" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao atribuir responsável", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const toggleSort = (key: SortKey) => {
@@ -165,34 +182,62 @@ export default function Contacts() {
 
   const batchDelete = async () => {
     const ids = Array.from(selectedContacts);
-    await deleteMany(ids);
-    setSelectedContacts(new Set());
-    toast({ title: `${ids.length} contatos excluídos` });
+    try {
+      await deleteMany(ids);
+      setSelectedContacts(new Set());
+      toast({ title: `${ids.length} contatos excluídos` });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao excluir contatos", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const batchChangeStatus = async (status: ContactStatus) => {
     const ids = Array.from(selectedContacts);
-    await updateStatus({ ids, status });
-    setSelectedContacts(new Set());
-    toast({ title: `Status atualizado para ${ids.length} contatos` });
+    try {
+      await updateStatus({ ids, status });
+      setSelectedContacts(new Set());
+      toast({ title: `Status atualizado para ${ids.length} contatos` });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao atualizar status", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
-  const exportCSV = () => {
-    const rows = contacts.map((c) => {
-      const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id);
-      return {
-        Nome: c.first_name, Sobrenome: c.last_name || "", Email: c.email || "",
-        Telefone: cleanPhone(c.phone), Cargo: c.title || "", Empresa: comp?.name || "", Status: c.status || "",
-      };
-    });
-    const headers = Object.keys(rows[0] || {});
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${(r as Record<string, unknown>)[h] || ""}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "contatos.csv"; a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: "CSV exportado" });
+  // Escapa célula CSV: aspas duplicadas + prefixo contra injeção de fórmula (Excel)
+  const csvCell = (v: unknown) => {
+    let s = String(v ?? "");
+    if (/^[=+\-@]/.test(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportCSV = async () => {
+    if (!orgId) return;
+    setExporting(true);
+    try {
+      // Exporta TODOS os contatos com os filtros atuais, não só a página visível
+      const allContacts = await contactsApi.listAll(orgId, {
+        search: debouncedSearch || undefined, sortKey, sortDir, ...filters,
+      });
+      const rows = allContacts.map((c) => {
+        const comp = companies.find((co) => co.id === (c as Record<string, unknown>).company_id);
+        return {
+          Nome: c.first_name, Sobrenome: c.last_name || "", Email: c.email || "",
+          Telefone: cleanPhone(c.phone), Cargo: c.title || "", Empresa: comp?.name || "", Status: c.status || "",
+        };
+      });
+      const headers = Object.keys(rows[0] || { Nome: "" });
+      const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => csvCell((r as Record<string, unknown>)[h])).join(","))].join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "contatos.csv"; a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: `${rows.length} contatos exportados` });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao exportar", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
   };
 
   const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
@@ -214,11 +259,12 @@ export default function Contacts() {
         actions={
           <>
             <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-              {([
+              {[
                 { mode: "table" as const, icon: List, label: "Tabela" },
                 { mode: "cards" as const, icon: LayoutGrid, label: "Cartões" },
-                { mode: "owner" as const, icon: Users, label: "Vendedor" },
-              ] as const).map(({ mode, icon: Icon, label }) => (
+                // Distribuição por vendedor é ação de gestor
+                ...(isAdmin ? [{ mode: "owner" as const, icon: Users, label: "Vendedor" }] : []),
+              ].map(({ mode, icon: Icon, label }) => (
                 <button key={mode} onClick={() => setViewMode(mode)} aria-label={`Visualização ${label}`}
                   className={`flex items-center gap-1 rounded-md px-2 sm:px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
                   <Icon className="h-3.5 w-3.5" /><span className="hidden sm:inline">{label}</span>
@@ -231,9 +277,11 @@ export default function Contacts() {
             <Button variant="outline" size="sm" onClick={() => setCsvOpen(true)} className="hidden sm:flex">
               <Upload className="mr-1.5 h-3.5 w-3.5" />Importar
             </Button>
-            <Button variant="outline" size="sm" onClick={exportCSV} className="hidden sm:flex">
-              <Download className="mr-1.5 h-3.5 w-3.5" />Exportar
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={exportCSV} disabled={exporting} className="hidden sm:flex">
+                {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}Exportar
+              </Button>
+            )}
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-1 sm:mr-2 h-4 w-4" /><span className="hidden sm:inline">Novo Contato</span><span className="sm:hidden">Novo</span>
             </Button>
@@ -254,24 +302,26 @@ export default function Contacts() {
             <Select value={filters.status || "all"} onValueChange={(v) => setFilters({ ...filters, status: v === "all" ? undefined : v })}>
               <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
+                {/* Leads têm página própria (/leads) e são excluídos desta lista */}
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="lead">Lead</SelectItem>
                 <SelectItem value="prospect">Prospect</SelectItem>
                 <SelectItem value="customer">Cliente</SelectItem>
                 <SelectItem value="churned">Churned</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Responsável</Label>
-            <Select value={filters.ownerId || "all"} onValueChange={(v) => setFilters({ ...filters, ownerId: v === "all" ? undefined : v })}>
-              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {isAdmin && (
+            <div className="space-y-1">
+              <Label className="text-xs">Responsável</Label>
+              <Select value={filters.ownerId || "all"} onValueChange={(v) => setFilters({ ...filters, ownerId: v === "all" ? undefined : v })}>
+                <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label className="text-xs">Empresa</Label>
             <Select value={filters.companyId || "all"} onValueChange={(v) => setFilters({ ...filters, companyId: v === "all" ? undefined : v })}>
@@ -312,9 +362,11 @@ export default function Contacts() {
               <DropdownMenuItem onClick={() => batchChangeStatus("churned")}>Churned</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" variant="destructive" onClick={batchDelete}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
-          </Button>
+          {isAdmin && (
+            <Button size="sm" variant="destructive" onClick={batchDelete}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
+            </Button>
+          )}
         </div>
       )}
 
@@ -344,7 +396,7 @@ export default function Contacts() {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8 shrink-0">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {c.first_name[0]}{c.last_name?.[0] || ""}
+                          {c.first_name?.[0] || "?"}{c.last_name?.[0] || ""}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
@@ -410,7 +462,7 @@ export default function Contacts() {
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10">
                     <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {c.first_name[0]}{c.last_name?.[0] || ""}
+                      {c.first_name?.[0] || "?"}{c.last_name?.[0] || ""}
                     </AvatarFallback>
                   </Avatar>
                   <div className="overflow-hidden">
@@ -431,9 +483,9 @@ export default function Contacts() {
         </div>
       )}
 
-      {viewMode === "owner" && (
+      {viewMode === "owner" && isAdmin && (
         <ContactsKanbanByOwner
-          contacts={contacts}
+          contacts={allContactsForKanban}
           members={members}
           companies={companies}
           onContactClick={(c) => setDrawerContact(c)}

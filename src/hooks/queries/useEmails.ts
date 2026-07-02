@@ -1,12 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { emailsApi, inboxContactsApi } from "@/lib/api/emails";
+import { emailsApi, inboxContactsApi, emailConnectionsApi } from "@/lib/api/emails";
 import type { Email } from "@/lib/api/emails";
 import { useOrg } from "@/hooks/useOrg";
 
 export const emailsKeys = {
   all: (orgId: string) => ["emails", orgId] as const,
   contacts: (orgId: string) => ["inbox-contacts", orgId] as const,
+  connections: (orgId: string) => ["email-connections", orgId] as const,
 };
+
+/** Contas de e-mail da EMPRESA (comercial/marketing) conectadas */
+export function useEmailConnections() {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: emailsKeys.connections(orgId ?? ""),
+    queryFn: () => emailConnectionsApi.list(orgId!),
+    enabled: !!orgId,
+    staleTime: 60 * 1000,
+  });
+}
 
 export function useEmails() {
   const { orgId } = useOrg();

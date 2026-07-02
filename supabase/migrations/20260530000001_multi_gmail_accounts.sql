@@ -20,9 +20,17 @@ BEGIN
   END IF;
 END $$;
 
-ALTER TABLE public.email_connections
-  ADD CONSTRAINT IF NOT EXISTS email_connections_user_provider_email_key
-  UNIQUE (user_id, provider, email_address);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'email_connections_user_provider_email_key'
+  ) THEN
+    ALTER TABLE public.email_connections
+      ADD CONSTRAINT email_connections_user_provider_email_key
+      UNIQUE (user_id, provider, email_address);
+  END IF;
+END $$;
 
 -- 3. Add synced_from to emails table for filtering by source account
 ALTER TABLE public.emails

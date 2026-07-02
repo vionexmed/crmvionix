@@ -23,6 +23,27 @@ export function useContacts(params: ContactListParams = {}) {
   });
 }
 
+/** Todos os contatos (sem paginação) — usado no kanban por vendedor e exportação */
+export function useAllContacts(params: ContactListParams = {}, enabled = true) {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: [...contactsKeys.all(orgId ?? ""), "unpaged", params] as const,
+    queryFn: () => contactsApi.listAll(orgId!, params),
+    enabled: !!orgId && enabled,
+  });
+}
+
+/** Lista leve p/ selects de contato (Negócios, Tarefas) — inclui leads */
+export function useContactsPicker() {
+  const { orgId } = useOrg();
+  return useQuery({
+    queryKey: [...contactsKeys.all(orgId ?? ""), "picker"] as const,
+    queryFn: () => contactsApi.listForPicker(orgId!),
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useLastActivities() {
   const { orgId } = useOrg();
   return useQuery({

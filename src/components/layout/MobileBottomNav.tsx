@@ -5,6 +5,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const mainItems = [
   { title: "Home", url: "/", icon: LayoutDashboard },
@@ -15,15 +16,17 @@ const mainItems = [
 
 const moreItems = [
   { title: "Empresas", url: "/companies" },
-  { title: "Caixa de Entrada", url: "/inbox" },
+  { title: "Caixa de Entrada", url: "/inbox", adminOnly: true },
   { title: "Relatórios", url: "/reports" },
-  { title: "Automações", url: "/automations" },
-  { title: "Configurações", url: "/settings" },
+  { title: "Automações", url: "/automations", adminOnly: true },
+  { title: "Configurações", url: "/settings", adminOnly: true },
 ];
 
 export function MobileBottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const visibleMoreItems = moreItems.filter((item) => isAdmin || !item.adminOnly);
 
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
@@ -54,7 +57,7 @@ export function MobileBottomNav() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top" className="mb-2">
-          {moreItems.map((item) => (
+          {visibleMoreItems.map((item) => (
             <DropdownMenuItem key={item.url} onClick={() => navigate(item.url)}>
               {item.title}
             </DropdownMenuItem>

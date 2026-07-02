@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { AREAS_ATUACAO, PAISES } from "@/lib/contact-options";
 import type { Database } from "@/integrations/supabase/types";
 
 type Company = Database["public"]["Tables"]["companies"]["Row"];
@@ -23,35 +24,6 @@ interface ContactCreateModalProps {
   onCreated: () => void;
   companies: Company[];
 }
-
-const AREAS_ATUACAO = [
-  // Especialidades médicas
-  "Acupuntura", "Alergia e Imunologia", "Anestesiologia", "Angiologia",
-  "Cardiologia", "Cirurgia Cardiovascular", "Cirurgia da Mão",
-  "Cirurgia de Cabeça e Pescoço", "Cirurgia do Aparelho Digestivo",
-  "Cirurgia Geral", "Cirurgia Oncológica", "Cirurgia Pediátrica",
-  "Cirurgia Plástica", "Cirurgia Torácica", "Cirurgia Vascular",
-  "Clínica Médica", "Coloproctologia", "Dermatologia",
-  "Endocrinologia e Metabologia", "Endoscopia", "Fisiatra",
-  "Fisioterapia", "Gastroenterologia", "Genética Médica",
-  "Geriatria", "Ginecologia e Obstetrícia", "Hematologia e Hemoterapia",
-  "Homeopatia", "Infectologia", "Mastologia",
-  "Medicina de Emergência", "Medicina de Família e Comunidade",
-  "Medicina do Esporte", "Medicina do Trabalho", "Medicina Esportiva",
-  "Medicina Intensiva", "Medicina Legal", "Medicina Nuclear",
-  "Medicina Preventiva e Social", "Nefrologia", "Neurocirurgia",
-  "Neurologia", "Nutrologia", "Nutrição",
-  "Oftalmologia", "Oncologia Clínica", "Ortopedia e Traumatologia",
-  "Otorrinolaringologia", "Patologia", "Pediatria",
-  "Pneumologia", "Psiquiatria", "Psicologia",
-  "Radiologia e Diagnóstico por Imagem", "Radioterapia", "Reumatologia",
-  "Urologia", "Outro",
-];
-
-const PAISES = [
-  "Brasil", "Portugal", "Estados Unidos", "Argentina", "Colômbia",
-  "México", "Chile", "Uruguai", "Paraguai", "Peru", "Outro",
-];
 
 export function ContactCreateModal({ open, onOpenChange, onCreated, companies }: ContactCreateModalProps) {
   const { orgId } = useOrg();

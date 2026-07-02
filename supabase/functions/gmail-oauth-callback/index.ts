@@ -138,17 +138,27 @@ serve(async (req) => {
       return htmlResponse("Erro ao salvar tokens.", false, finalReturn);
     }
 
-    // Upsert email_connections with label/purpose (multi-account support)
+    // Conta da EMPRESA: uma conta ativa por finalidade (sales/marketing).
+    // Desativa a conta anterior do slot (se outra) antes de ativar a nova.
+    const purpose = state.purpose || "sales";
+    await supabaseAdmin
+      .from("email_connections")
+      .update({ is_active: false })
+      .eq("org_id", state.org_id)
+      .eq("purpose", purpose)
+      .eq("is_active", true)
+      .neq("email_address", email);
+
     await supabaseAdmin.from("email_connections").upsert({
-      user_id: state.user_id,
+      user_id: state.user_id, // quem conectou (auditoria)
       org_id: state.org_id,
       provider: "gmail",
       email_address: email,
       label: state.label || "Principal",
-      purpose: state.purpose || "sales",
+      purpose,
       is_active: true,
       connected_at: new Date().toISOString(),
-    }, { onConflict: "user_id,provider,email_address" });
+    }, { onConflict: "org_id,provider,email_address" });
 
     // Also upsert integration_configs so the existing UI lights up "Conectado"
     const { data: existing } = await supabaseAdmin

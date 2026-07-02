@@ -5,7 +5,7 @@ import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeals, useCreateDeal, useUpdateDeal, useUpdateDealStage, useUpdateDealStatus, useBatchUpdateDeals, dealsKeys } from "@/hooks/queries/useDeals";
-import { useContacts } from "@/hooks/queries/useContacts";
+import { useContactsPicker } from "@/hooks/queries/useContacts";
 import { useCompanies } from "@/hooks/queries/useCompanies";
 import { useMembers } from "@/hooks/queries/useMembers";
 import { usePipelines, usePipelineStages, useSavePipelineStages } from "@/hooks/queries/usePipelines";
@@ -39,7 +39,7 @@ type ViewMode = "kanban" | "list" | "forecast";
 
 export default function Deals() {
   const { orgId } = useOrg();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -52,8 +52,8 @@ export default function Deals() {
   // Supporting data
   const { data: allStages = [] } = usePipelineStages();
   const { data: pipelines = [] } = usePipelines();
-  const { data: contactsResult } = useContacts({ pageSize: 5000 });
-  const contacts = contactsResult?.data ?? [];
+  // Lista leve, sem o teto de 1000 linhas do PostgREST (inclui leads)
+  const { data: contacts = [] } = useContactsPicker();
   const { data: companies = [] } = useCompanies();
   const { data: members = [] } = useMembers();
 
@@ -186,6 +186,7 @@ export default function Deals() {
 
   const handleSave = async () => {
     if (!orgId || !form.title) return;
+    try {
     if (editing) {
       await updateDeal({
         id: editing.id,
@@ -207,11 +208,18 @@ export default function Deals() {
     }
     setSheetOpen(false);
     toast({ title: editing ? "Negócio atualizado" : "Negócio criado" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao salvar negócio", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const markAsWon = async (dealId: string) => {
-    await updateStatus({ id: dealId, status: "won" });
-    toast({ title: "Negócio marcado como ganho! 🎉" });
+    try {
+      await updateStatus({ id: dealId, status: "won" });
+      toast({ title: "Negócio marcado como ganho! 🎉" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao atualizar negócio", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const openLossModal = (dealId: string) => {
@@ -224,17 +232,25 @@ export default function Deals() {
   const confirmLoss = async () => {
     if (!lossDealId) return;
     const reason = lossNote ? `${lossReason}: ${lossNote}` : lossReason;
-    await updateStatus({ id: lossDealId, status: "lost", lossReason: reason });
-    setLossModalOpen(false);
-    toast({ title: "Negócio marcado como perdido" });
+    try {
+      await updateStatus({ id: lossDealId, status: "lost", lossReason: reason });
+      setLossModalOpen(false);
+      toast({ title: "Negócio marcado como perdido" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao atualizar negócio", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   const handleBatchAction = async (action: "won" | "lost" | "delete") => {
     const ids = Array.from(selectedDeals);
-    await batchUpdate({ ids, action });
-    setSelectedDeals(new Set());
-    const messages = { won: "ganhos", lost: "perdidos", delete: "excluídos" };
-    toast({ title: `${ids.length} negócios ${messages[action]}` });
+    try {
+      await batchUpdate({ ids, action });
+      setSelectedDeals(new Set());
+      const messages = { won: "ganhos", lost: "perdidos", delete: "excluídos" };
+      toast({ title: `${ids.length} negócios ${messages[action]}` });
+    } catch (e: unknown) {
+      toast({ title: "Erro na ação em lote", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
 
   if (!orgId) {
@@ -288,9 +304,11 @@ export default function Deals() {
               </SelectContent>
             </Select>
           )}
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={openPipelineEditor} aria-label="Personalizar pipeline">
-            <Settings2 className="h-3.5 w-3.5" />
-          </Button>
+          {isAdmin && (
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={openPipelineEditor} aria-label="Personalizar pipeline">
+              <Settings2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8" onClick={() => setShowFilters(!showFilters)} aria-label="Alternar filtros">
             <Filter className="mr-1 h-3 w-3" /><span className="hidden sm:inline">Filtro</span>
           </Button>
@@ -324,6 +342,7 @@ export default function Deals() {
             onSelectionChange={setSelectedDeals}
             onDealClick={(d) => navigate(`/deals/${d.id}`)}
             onBatchAction={handleBatchAction}
+            canDelete={isAdmin}
           />
           {listTotalPages > 1 && (
             <div className="flex items-center justify-between">
@@ -405,16 +424,18 @@ export default function Deals() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Responsável</Label>
-              <Select value={form.owner_id || "none"} onValueChange={(v) => setForm({ ...form, owner_id: v === "none" ? null : v })}>
-                <SelectTrigger><SelectValue placeholder="Selecionar responsável" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
-                  {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <Label>Responsável</Label>
+                <Select value={form.owner_id || "none"} onValueChange={(v) => setForm({ ...form, owner_id: v === "none" ? null : v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar responsável" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name || m.email}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Probabilidade (%)</Label>

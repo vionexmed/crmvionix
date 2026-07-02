@@ -34,6 +34,39 @@ const contactFields = [
   { key: "__skip", label: "— Ignorar —" },
 ];
 
+/**
+ * Parser CSV correto: respeita campos entre aspas (com vírgulas e quebras
+ * de linha embutidas), aspas escapadas ("") e arquivos CRLF do Excel.
+ * O split ingênuo por \n e , corrompia arquivos reais.
+ */
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field); field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      rows.push(row); row = [];
+    } else field += ch;
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.map((r) => r.map((c) => c.trim()));
+}
+
+const VALID_CONTACT_STATUS = ["lead", "prospect", "customer", "churned"];
+
 const companyFields = [
   { key: "name", label: "Nome" },
   { key: "domain", label: "Domínio" },
@@ -65,7 +98,7 @@ export function CSVImportModal({ open, onOpenChange, onImported, entityType }: C
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split("\n").map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
+      const lines = parseCSV(text);
       if (lines.length < 2) { toast({ title: "CSV vazio ou inválido", variant: "destructive" }); return; }
       setCsvHeaders(lines[0]);
       setCsvRows(lines.slice(1).filter((r) => r.some((c) => c)));
@@ -100,6 +133,13 @@ export function CSVImportModal({ open, onOpenChange, onImported, entityType }: C
             record[fieldKey] = row[Number(colIdx)] || null;
           }
         });
+        if (entityType === "contacts") {
+          // Sem status válido no CSV → 'prospect'. O default do banco é 'lead',
+          // que fazia os contatos importados sumirem da página Contatos
+          // (leads ficam em /leads).
+          const status = String(record.status || "").toLowerCase();
+          record.status = VALID_CONTACT_STATUS.includes(status) ? status : "prospect";
+        }
         return record;
       });
 

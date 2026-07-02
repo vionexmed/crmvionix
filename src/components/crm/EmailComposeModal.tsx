@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { Send, FileText, ChevronDown, X, Variable, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useEmailConnections } from "@/hooks/queries/useEmails";
 
 type Contact = { id: string; first_name: string; last_name: string | null; email: string | null; org_id: string };
 type Deal = { id: string; title: string; org_id: string; contact_id: string | null };
@@ -30,6 +31,8 @@ interface Props {
   defaultTo?: string;
   defaultContactId?: string;
   defaultDealId?: string;
+  /** Conta da empresa usada no envio (sales = comercial). Admin pode trocar no modal. */
+  defaultPurpose?: "sales" | "marketing";
 }
 
 const VARIABLES = [
@@ -40,10 +43,12 @@ const VARIABLES = [
   { key: "{{dono_nome}}", label: "Nome do dono" },
 ];
 
-export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defaultContactId, defaultDealId }: Props) {
+export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defaultContactId, defaultDealId, defaultPurpose = "sales" }: Props) {
   const { orgId } = useOrg();
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const { toast } = useToast();
+  const { data: connections = [] } = useEmailConnections();
+  const [purpose, setPurpose] = useState<"sales" | "marketing">(defaultPurpose);
 
   const [to, setTo] = useState(defaultTo || "");
   const [cc, setCc] = useState("");
@@ -70,6 +75,7 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
     if (!open || !orgId) return;
     setTo(defaultTo || ""); setSubject(""); setBody(""); setCc(""); setBcc("");
     setContactId(defaultContactId || "none"); setDealId(defaultDealId || "none");
+    setPurpose(defaultPurpose);
     Promise.all([
       supabase.from("contacts").select("id,first_name,last_name,email,org_id").eq("org_id", orgId),
       supabase.from("deals").select("id,title,org_id,contact_id").eq("org_id", orgId),
@@ -185,6 +191,7 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
         bcc: bcc ? bcc.split(",").map((e) => e.trim()).filter(Boolean) : [],
         subject,
         html: htmlBody,
+        purpose, // conta da empresa que envia (comercial é travado em sales no servidor)
       },
     });
     setSending(false);
@@ -248,6 +255,35 @@ export function EmailComposeModal({ open, onOpenChange, onSent, defaultTo, defau
               </Select>
             </div>
           </div>
+
+          {/* De (conta da empresa) */}
+          {(() => {
+            const salesConn = connections.find((c) => c.purpose === "sales");
+            const mktConn = connections.find((c) => c.purpose === "marketing");
+            const current = purpose === "marketing" ? mktConn : salesConn;
+            if (isAdmin && salesConn && mktConn) {
+              return (
+                <div className="space-y-1">
+                  <Label className="text-xs">De</Label>
+                  <Select value={purpose} onValueChange={(v) => setPurpose(v as "sales" | "marketing")}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sales">Comercial · {salesConn.email_address}</SelectItem>
+                      <SelectItem value="marketing">Marketing · {mktConn.email_address}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            }
+            if (current) {
+              return (
+                <p className="text-[11px] text-muted-foreground">
+                  De: <span className="font-medium">{current.email_address}</span>
+                </p>
+              );
+            }
+            return null;
+          })()}
 
           {/* To */}
           <div className="space-y-1">

@@ -113,7 +113,7 @@ export const dealsApi = {
         "*, contact:contacts!deals_contact_id_fkey(*), company:companies!deals_company_id_fkey(*), owner:profiles!deals_owner_id_fkey(*)"
       )
       .eq("id", id)
-      .single();
+      .maybeSingle(); // negócio inexistente → null (sem 3 retries de erro)
     if (error) throw error;
     return data as DealWithRelations;
   },

@@ -45,6 +45,17 @@ export const pipelinesApi = {
     const toDelete = currentStageIds.filter((id) => !keptIds.includes(id));
 
     if (toDelete.length > 0) {
+      // Não deixa apagar estágio que ainda tem negócios — os deals ficariam órfãos
+      const { count, error: countError } = await supabase
+        .from(TABLES.DEALS)
+        .select("id", { count: "exact", head: true })
+        .in("stage_id", toDelete);
+      if (countError) throw countError;
+      if ((count ?? 0) > 0) {
+        throw new Error(
+          `Não é possível remover: ${count} negócio(s) ainda estão em estágio(s) que você está excluindo. Mova-os primeiro.`
+        );
+      }
       const { error } = await supabase.from(TABLES.PIPELINE_STAGES).delete().in("id", toDelete);
       if (error) throw error;
     }

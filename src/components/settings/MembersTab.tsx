@@ -49,12 +49,15 @@ export function MembersTab({ orgId, userId }: { orgId: string | null; userId?: s
 
   const sendInvite = async () => {
     if (!orgId || !inviteEmail) return;
-    const { error } = await supabase.from("invitations").insert({
-      org_id: orgId, email: inviteEmail, invited_by: userId, role: inviteRole as any,
+    // Mesmo fluxo da página Equipe: a edge function envia o e-mail com
+    // magic link E registra o convite (insert direto não enviava e-mail)
+    const res = await supabase.functions.invoke("invite-member", {
+      body: { email: inviteEmail, role: inviteRole, org_id: orgId },
     });
-    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    const errMsg = res.error?.message || (res.data as { error?: string } | null)?.error;
+    if (errMsg) { toast({ title: "Erro ao convidar", description: errMsg, variant: "destructive" }); return; }
     setInviteEmail("");
-    toast({ title: "Convite enviado!" });
+    toast({ title: "Convite enviado!", description: `Magic link enviado para ${inviteEmail}` });
   };
 
   const removeUser = async (uid: string) => {
@@ -89,7 +92,7 @@ export function MembersTab({ orgId, userId }: { orgId: string | null; userId?: s
     fetchAll();
   };
 
-  const roleLabels: Record<string, string> = { owner: "Proprietário", admin: "Administrador", member: "Membro" };
+  const roleLabels: Record<string, string> = { owner: "Proprietário", admin: "Administrador", member: "Comercial" };
   const roleColors: Record<string, string> = { owner: "text-warning", admin: "text-primary", member: "text-muted-foreground" };
 
   return (
@@ -105,7 +108,7 @@ export function MembersTab({ orgId, userId }: { orgId: string | null; userId?: s
             <Select value={inviteRole} onValueChange={setInviteRole}>
               <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="member">Membro</SelectItem>
+                <SelectItem value="member">Comercial</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>

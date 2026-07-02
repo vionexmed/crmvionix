@@ -18,7 +18,9 @@ import { AtRiskPanel } from "@/components/crm/AtRiskPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 
-const navGroups = [
+type NavItem = { title: string; url: string; icon: React.ElementType; adminOnly?: boolean };
+
+const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Principal",
     items: [
@@ -33,35 +35,35 @@ const navGroups = [
   {
     label: "Atendimento",
     items: [
-      { title: "Conversas",        url: "/conversations",   icon: MessageSquare },
-      { title: "Email Atendimento", url: "/inbox",          icon: Inbox },
-      { title: "Templates",        url: "/email-templates", icon: FileText },
-      { title: "Sequências",       url: "/email-sequences", icon: Zap },
+      { title: "Conversas",        url: "/conversations",   icon: MessageSquare, adminOnly: true },
+      { title: "Email Atendimento", url: "/inbox",          icon: Inbox,         adminOnly: true },
+      { title: "Templates",        url: "/email-templates", icon: FileText,      adminOnly: true },
+      { title: "Sequências",       url: "/email-sequences", icon: Zap,           adminOnly: true },
     ],
   },
   {
     label: "Marketing",
     items: [
-      { title: "Visão Geral",     url: "/marketing/visao-geral", icon: Megaphone },
-      { title: "Email Marketing", url: "/marketing/inbox",       icon: Mail },
+      { title: "Visão Geral",     url: "/marketing/visao-geral", icon: Megaphone, adminOnly: true },
+      { title: "Email Marketing", url: "/marketing/inbox",       icon: Mail,      adminOnly: true },
     ],
   },
   {
     label: "Analytics",
     items: [
       { title: "Metas",        url: "/sales-goals",  icon: Target },
-      { title: "Lead Scoring", url: "/lead-scoring", icon: TrendingUp },
+      { title: "Lead Scoring", url: "/lead-scoring", icon: TrendingUp, adminOnly: true },
       { title: "Relatórios",   url: "/reports",      icon: BarChart3 },
-      { title: "Automações",   url: "/automations",  icon: Zap },
+      { title: "Automações",   url: "/automations",  icon: Zap,        adminOnly: true },
     ],
   },
   {
     label: "Admin",
     items: [
-      { title: "Equipe",       url: "/team",                  icon: Users },
-      { title: "Configurações", url: "/settings",             icon: Settings },
-      { title: "Integrações",  url: "/settings/integrations", icon: Plug },
-      { title: "Segurança",    url: "/settings/security",     icon: Shield },
+      { title: "Equipe",       url: "/team",                  icon: Users,    adminOnly: true },
+      { title: "Configurações", url: "/settings",             icon: Settings, adminOnly: true },
+      { title: "Integrações",  url: "/settings/integrations", icon: Plug,     adminOnly: true },
+      { title: "Segurança",    url: "/settings/security",     icon: Shield,   adminOnly: true },
     ],
   },
 ];
@@ -70,8 +72,16 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isAdmin } = useAuth();
   const { orgId } = useOrg();
+
+  // Comercial (member) só vê os itens não-admin
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => isAdmin || !item.adminOnly),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const [atRiskOpen, setAtRiskOpen] = useState(false);
   const [leadCount, setLeadCount] = useState(0);
@@ -156,7 +166,7 @@ export function AppSidebar() {
           </SidebarGroup>
 
           {/* Nav groups */}
-          {navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <SidebarGroup key={group.label}>
               <SidebarGroupContent>
                 {!collapsed && (

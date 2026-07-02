@@ -23,7 +23,7 @@ export function StepOrganization({ orgId, userId, onComplete, stepData, setStepD
 
   useEffect(() => {
     if (orgId) {
-      supabase.from("organizations").select("name, slug, settings").eq("id", orgId).single().then(({ data }) => {
+      supabase.from("organizations").select("name, slug, settings").eq("id", orgId).maybeSingle().then(({ data }) => {
         if (data) {
           setName(data.name || "");
           setSlug(data.slug || "");

@@ -20,32 +20,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { AREAS_ATUACAO, PAISES } from "@/lib/contact-options";
 import type { Database } from "@/integrations/supabase/types";
-
-const PAISES = [
-  "Brasil", "Portugal", "Estados Unidos", "Argentina", "Colômbia",
-  "México", "Chile", "Uruguai", "Paraguai", "Peru", "Outro",
-];
-
-const AREAS_ATUACAO = [
-  "Acupuntura", "Alergia e Imunologia", "Anestesiologia", "Angiologia",
-  "Cardiologia", "Cirurgia Cardiovascular", "Cirurgia da Mão",
-  "Cirurgia de Cabeça e Pescoço", "Cirurgia do Aparelho Digestivo",
-  "Cirurgia Geral", "Cirurgia Oncológica", "Cirurgia Pediátrica",
-  "Cirurgia Plástica", "Cirurgia Torácica", "Cirurgia Vascular",
-  "Clínica Médica", "Coloproctologia", "Dermatologia",
-  "Endocrinologia e Metabologia", "Endoscopia", "Fisiatra",
-  "Fisioterapia", "Gastroenterologia", "Geriatria",
-  "Ginecologia e Obstetrícia", "Hematologia e Hemoterapia",
-  "Infectologia", "Mastologia", "Medicina de Emergência",
-  "Medicina de Família e Comunidade", "Medicina do Esporte",
-  "Medicina do Trabalho", "Medicina Intensiva", "Nefrologia",
-  "Neurocirurgia", "Neurologia", "Nutrologia", "Nutrição",
-  "Oftalmologia", "Oncologia Clínica", "Ortopedia e Traumatologia",
-  "Otorrinolaringologia", "Pediatria", "Pneumologia",
-  "Psiquiatria", "Psicologia", "Radiologia e Diagnóstico por Imagem",
-  "Reumatologia", "Urologia", "Outro",
-];
 
 type Contact = Database["public"]["Tables"]["contacts"]["Row"];
 type Company = Database["public"]["Tables"]["companies"]["Row"];
@@ -89,6 +65,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Contact>>({});
+  const [phoneValid, setPhoneValid] = useState(true);
   // Metadata fields (editable separately)
   const [meta, setMeta] = useState({ pais: "", cidade: "", interesse: "", empresa_manual: "" });
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -119,12 +96,17 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
         empresa_manual: m.empresa_manual || "",
       });
       setEditing(false);
+      setPhoneValid(true);
       fetchRelated();
     }
   }, [contact, fetchRelated]);
 
   const handleSave = async () => {
     if (!contact) return;
+    if (!phoneValid) {
+      toast({ title: "Telefone inválido", description: "Corrija o telefone antes de salvar.", variant: "destructive" });
+      return;
+    }
     const existingMeta = ((contact as any).metadata as Record<string, unknown>) || {};
     const { error } = await supabase.from("contacts").update({
       first_name: form.first_name,
@@ -170,7 +152,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
           <div className="flex items-start gap-4">
             <Avatar className="h-14 w-14">
               <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                {contact.first_name[0]}{contact.last_name?.[0] || ""}
+                {contact.first_name?.[0] || "?"}{contact.last_name?.[0] || ""}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
@@ -245,7 +227,7 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                 {/* Telefone */}
                 <div className="space-y-1">
                   <Label className="text-xs">Telefone</Label>
-                  <PhoneInput value={form.phone || ""} onChange={(e164) => setForm({ ...form, phone: e164 })} />
+                  <PhoneInput value={form.phone || ""} onChange={(e164, isValid) => { setForm({ ...form, phone: e164 }); setPhoneValid(isValid || !e164); }} />
                 </div>
 
                 {/* Email */}

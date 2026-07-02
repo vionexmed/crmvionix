@@ -38,12 +38,14 @@ export const activitiesApi = {
     return map;
   },
 
-  list: async (orgId: string): Promise<Activity[]> => {
-    const { data, error } = await supabase
+  list: async (orgId: string, type?: Activity["type"]): Promise<Activity[]> => {
+    let query = supabase
       .from(TABLES.ACTIVITIES)
       .select("*")
       .eq("org_id", orgId)
       .order("due_date", { ascending: true, nullsFirst: false });
+    if (type) query = query.eq("type", type); // filtra no servidor (Tarefas não precisa baixar tudo)
+    const { data, error } = await query;
     if (error) throw error;
     return data ?? [];
   },

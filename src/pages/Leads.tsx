@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useLeads } from "@/hooks/queries/useContacts";
 import { usePipelines } from "@/hooks/queries/usePipelines";
@@ -51,6 +52,7 @@ const sourceLabel = (src: string) => {
 
 export default function Leads() {
   const { orgId } = useOrg();
+  const { isAdmin } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -68,8 +70,6 @@ export default function Leads() {
     }
   }, [pipelines, selectedPipeline]);
 
-  const leadsQueryKey = [...contactsKeys.all(orgId ?? ""), "leads"];
-
   const deleteLeadMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("contacts").delete().eq("id", id);
@@ -78,7 +78,7 @@ export default function Leads() {
     onSuccess: (_data, id) => {
       toast({ title: "Lead removido" });
       if (viewing?.id === id) setViewing(null);
-      qc.invalidateQueries({ queryKey: leadsQueryKey });
+      if (orgId) qc.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
     },
     onError: (e: any) => {
       toast({ title: "Erro ao remover lead", description: e.message, variant: "destructive" });
@@ -93,7 +93,7 @@ export default function Leads() {
     onSuccess: () => {
       toast({ title: "Lead desqualificado" });
       setViewing(null);
-      qc.invalidateQueries({ queryKey: leadsQueryKey });
+      if (orgId) qc.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
     },
     onError: (e: any) => {
       toast({ title: "Erro ao desqualificar", description: e.message, variant: "destructive" });
@@ -103,39 +103,19 @@ export default function Leads() {
   const qualifyMutation = useMutation({
     mutationFn: async ({ lead, pipelineId }: { lead: Lead; pipelineId: string }) => {
       if (!orgId) throw new Error("No org");
-
-      const { error: updateError } = await supabase
-        .from("contacts")
-        .update({ status: "prospect" })
-        .eq("id", lead.id);
-      if (updateError) throw updateError;
-
-      const { data: stages, error: stagesError } = await supabase
-        .from("pipeline_stages")
-        .select("id")
-        .eq("pipeline_id", pipelineId)
-        .eq("org_id", orgId)
-        .order("order", { ascending: true })
-        .limit(1) as any;
-      if (stagesError) throw stagesError;
-
-      const stageId = stages?.[0]?.id;
-      const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
-
-      const { error: dealError } = await supabase.from("deals").insert({
-        org_id: orgId,
-        title: `Lead: ${fullName}`,
-        contact_id: lead.id,
-        stage_id: stageId || null,
-        value: 0,
-        status: "open",
+      // RPC atômica: status → prospect + criação do negócio na mesma transação
+      const { error } = await supabase.rpc("qualify_lead", {
+        p_contact_id: lead.id,
+        p_pipeline_id: pipelineId,
       });
-      if (dealError) throw dealError;
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Lead qualificado!", description: "Movido para Contatos e negócio criado." });
       setQualifying(null);
-      qc.invalidateQueries({ queryKey: leadsQueryKey });
+      // Invalida TODAS as queries de contatos (lista de leads E lista de contatos)
+      if (orgId) qc.invalidateQueries({ queryKey: contactsKeys.all(orgId) });
+      qc.invalidateQueries({ queryKey: ["deals"] });
       navigate("/deals");
     },
     onError: (e: any) => {
@@ -222,7 +202,7 @@ export default function Leads() {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
-                  {lead.first_name.charAt(0).toUpperCase()}
+                  {(lead.first_name || "?").charAt(0).toUpperCase()}
                 </div>
                 <span className="font-medium truncate">{fullName(lead as Lead)}</span>
               </div>
@@ -241,9 +221,11 @@ export default function Leads() {
                   <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                   Qualificar
                 </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteLead(lead.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {isAdmin && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteLead(lead.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -258,7 +240,7 @@ export default function Leads() {
               <SheetHeader className="pb-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary text-xl font-bold">
-                    {viewing.first_name.charAt(0).toUpperCase()}
+                    {(viewing.first_name || "?").charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <SheetTitle className="font-heading text-lg">{fullName(viewing)}</SheetTitle>
@@ -340,10 +322,12 @@ export default function Leads() {
                     <XCircle className="h-4 w-4 mr-2" />
                     Desqualificar
                   </Button>
-                  <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => deleteLead(viewing.id)}>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir lead
-                  </Button>
+                  {isAdmin && (
+                    <Button variant="ghost" className="w-full text-muted-foreground" onClick={() => deleteLead(viewing.id)}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir lead
+                    </Button>
+                  )}
                 </div>
               </div>
             </>

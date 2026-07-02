@@ -5,10 +5,23 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
+export type AppRole = "owner" | "admin" | "member";
+
+/** Labels de exibição dos papéis (member = Comercial) */
+export const ROLE_LABELS: Record<AppRole, string> = {
+  owner: "Proprietário",
+  admin: "Administrador",
+  member: "Comercial",
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  /** Papel do usuário na org atual (null enquanto carrega ou sem org) */
+  role: AppRole | null;
+  /** true para owner/admin — acesso total */
+  isAdmin: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -18,6 +31,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   profile: null,
+  role: null,
+  isAdmin: false,
   loading: true,
   signOut: async () => {},
   refreshProfile: async () => {},
@@ -29,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId: string) => {
@@ -81,6 +97,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Carregar o papel do usuário na org (member = Comercial, acesso restrito)
+    let userRole: AppRole | null = null;
+    if (result?.org_id) {
+      const { data: roleRow, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("org_id", result.org_id)
+        .maybeSingle();
+      if (roleError) {
+        console.warn("[AuthContext] role fetch error", roleError);
+      }
+      userRole = (roleRow?.role as AppRole) ?? null;
+    }
+
+    setRole(userRole);
     setProfile(result);
     setLoading(false);
   }, []);
@@ -99,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setProfile(null);
+          setRole(null);
           setLoading(false);
         }
       }
@@ -127,10 +160,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setProfile(null);
+    setRole(null);
   };
 
+  const isAdmin = role === "owner" || role === "admin";
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, session, profile, role, isAdmin, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

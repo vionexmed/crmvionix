@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,10 +8,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { RequireAdmin } from "@/components/layout/RequireAdmin";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineDetector } from "@/components/OfflineDetector";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
+import AcceptInvite from "./pages/AcceptInvite";
 import NotFound from "./pages/NotFound";
 
 /**
@@ -76,6 +79,18 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+  // Rede de segurança: nenhuma mutation falha em silêncio.
+  // Telas que já tratam o erro exibem seu próprio toast; este cobre o resto.
+  mutationCache: new MutationCache({
+    onError: (error, _vars, _ctx, mutation) => {
+      if (mutation.options.onError) return; // já tratado localmente
+      toast({
+        title: "Erro ao salvar",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    },
+  }),
 });
 
 function RouteLoader() {
@@ -107,6 +122,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/accept-invite" element={<AcceptInvite />} />
               <Route path="/setup" element={<SuspenseRoute><Setup /></SuspenseRoute>} />
               
               <Route element={<AppLayout />}>
@@ -118,22 +134,26 @@ const App = () => (
                 <Route path="/deals/:id" element={<SuspenseRoute><DealDetail /></SuspenseRoute>} />
                 <Route path="/activities" element={<SuspenseRoute><Activities /></SuspenseRoute>} />
                 <Route path="/tasks" element={<SuspenseRoute><Tasks /></SuspenseRoute>} />
-                <Route path="/inbox" element={<SuspenseRoute><Inbox /></SuspenseRoute>} />
-                <Route path="/conversations" element={<SuspenseRoute><Conversations /></SuspenseRoute>} />
-                <Route path="/email-templates" element={<SuspenseRoute><EmailTemplates /></SuspenseRoute>} />
-                <Route path="/email-sequences" element={<SuspenseRoute><EmailSequences /></SuspenseRoute>} />
-                <Route path="/lead-scoring" element={<SuspenseRoute><LeadScoring /></SuspenseRoute>} />
                 <Route path="/reports" element={<SuspenseRoute><Reports /></SuspenseRoute>} />
-                <Route path="/automations" element={<SuspenseRoute><Automations /></SuspenseRoute>} />
                 <Route path="/sales-goals" element={<SuspenseRoute><SalesGoals /></SuspenseRoute>} />
-                <Route path="/marketing" element={<SuspenseRoute><Marketing /></SuspenseRoute>}>
-                  <Route path="visao-geral" element={<SuspenseRoute><MarketingOverview /></SuspenseRoute>} />
-                  <Route path="inbox" element={<SuspenseRoute><InboxMarketing /></SuspenseRoute>} />
+
+                {/* Rotas restritas a owner/admin — Comercial é redirecionado */}
+                <Route element={<RequireAdmin />}>
+                  <Route path="/inbox" element={<SuspenseRoute><Inbox /></SuspenseRoute>} />
+                  <Route path="/conversations" element={<SuspenseRoute><Conversations /></SuspenseRoute>} />
+                  <Route path="/email-templates" element={<SuspenseRoute><EmailTemplates /></SuspenseRoute>} />
+                  <Route path="/email-sequences" element={<SuspenseRoute><EmailSequences /></SuspenseRoute>} />
+                  <Route path="/lead-scoring" element={<SuspenseRoute><LeadScoring /></SuspenseRoute>} />
+                  <Route path="/automations" element={<SuspenseRoute><Automations /></SuspenseRoute>} />
+                  <Route path="/marketing" element={<SuspenseRoute><Marketing /></SuspenseRoute>}>
+                    <Route path="visao-geral" element={<SuspenseRoute><MarketingOverview /></SuspenseRoute>} />
+                    <Route path="inbox" element={<SuspenseRoute><InboxMarketing /></SuspenseRoute>} />
+                  </Route>
+                  <Route path="/settings" element={<SuspenseRoute><Settings /></SuspenseRoute>} />
+                  <Route path="/settings/integrations" element={<SuspenseRoute><Integrations /></SuspenseRoute>} />
+                  <Route path="/settings/security" element={<SuspenseRoute><SecuritySettings /></SuspenseRoute>} />
+                  <Route path="/team" element={<SuspenseRoute><Team /></SuspenseRoute>} />
                 </Route>
-                <Route path="/settings" element={<SuspenseRoute><Settings /></SuspenseRoute>} />
-                <Route path="/settings/integrations" element={<SuspenseRoute><Integrations /></SuspenseRoute>} />
-                <Route path="/settings/security" element={<SuspenseRoute><SecuritySettings /></SuspenseRoute>} />
-                <Route path="/team" element={<SuspenseRoute><Team /></SuspenseRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

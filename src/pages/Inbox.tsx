@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEmails, useInboxContacts, useUpdateEmail, useDeleteEmail, useBatchUpdateEmails, emailsKeys } from "@/hooks/queries/useEmails";
+import { useEmails, useInboxContacts, useUpdateEmail, useDeleteEmail, useBatchUpdateEmails, useEmailConnections, emailsKeys } from "@/hooks/queries/useEmails";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -51,14 +52,38 @@ const FOLDERS: { id: Folder; label: string; icon: any }[] = [
   { id: "all", label: "Todos", icon: Mail },
 ];
 
-export default function Inbox() {
+interface InboxProps {
+  /** Qual caixa da empresa exibir: sales (comercial) ou marketing */
+  purpose?: "sales" | "marketing";
+}
+
+export default function Inbox({ purpose = "sales" }: InboxProps) {
   const { orgId } = useOrg();
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: emails = [] } = useEmails();
+  const { data: allEmails = [] } = useEmails();
+  const { data: connections = [] } = useEmailConnections();
   const { data: contacts = [] } = useInboxContacts();
+
+  const account = connections.find((c) => c.purpose === purpose);
+
+  // Separa as caixas: marketing mostra só o que veio da conta de marketing;
+  // comercial mostra o resto (inclui e-mails legados sem synced_from)
+  const emails = useMemo(() => {
+    const marketingAddrs = connections
+      .filter((c) => c.purpose === "marketing")
+      .map((c) => c.email_address.toLowerCase());
+    if (purpose === "marketing") {
+      return allEmails.filter(
+        (e) => e.synced_from && marketingAddrs.includes(e.synced_from.toLowerCase())
+      );
+    }
+    return allEmails.filter(
+      (e) => !e.synced_from || !marketingAddrs.includes(e.synced_from.toLowerCase())
+    );
+  }, [allEmails, connections, purpose]);
   const updateEmailMutation = useUpdateEmail();
   const deleteEmailMutation = useDeleteEmail();
   const batchUpdateMutation = useBatchUpdateEmails();
@@ -140,9 +165,12 @@ export default function Inbox() {
   [emails]);
 
   const updateEmail = async (id: string, patch: Partial<Email>) => {
-    setEmails((prev) => prev.map((e) => e.id === id ? { ...e, ...patch } : e));
     if (selectedEmail?.id === id) setSelectedEmail((prev) => prev ? { ...prev, ...patch } : prev);
-    await supabase.from("emails").update(patch as any).eq("id", id);
+    try {
+      await updateEmailMutation.mutateAsync({ id, patch });
+    } catch (e: any) {
+      toast({ title: "Erro ao atualizar email", description: e.message, variant: "destructive" });
+    }
   };
 
   const markRead = (id: string) => updateEmail(id, { is_read: true });
@@ -161,10 +189,13 @@ export default function Inbox() {
   };
 
   const deleteForever = async (id: string) => {
-    await supabase.from("emails").delete().eq("id", id);
-    setEmails((prev) => prev.filter((e) => e.id !== id));
     if (selectedEmail?.id === id) setSelectedEmail(null);
-    toast({ title: "Excluído permanentemente" });
+    try {
+      await deleteEmailMutation.mutateAsync(id);
+      toast({ title: "Excluído permanentemente" });
+    } catch (e: any) {
+      toast({ title: "Erro ao excluir email", description: e.message, variant: "destructive" });
+    }
   };
 
   const sendReply = async (mode: "reply" | "replyAll" | "forward") => {
@@ -184,6 +215,7 @@ export default function Inbox() {
         cc: ccList,
         subject: `${mode === "forward" ? "Fwd:" : "Re:"} ${selectedEmail.subject || ""}`,
         html: replyBody,
+        purpose, // responde pela conta da caixa atual (comercial/marketing)
       },
     });
     if (error || (data as any)?.error) {
@@ -201,7 +233,7 @@ export default function Inbox() {
     if (!orgId) return;
     setSyncing(true);
     const { data, error } = await supabase.functions.invoke("gmail-sync", {
-      body: { org_id: orgId, max: 50 },
+      body: { org_id: orgId, max: 50, purpose },
     });
     setSyncing(false);
     if (error || (data as any)?.error) {
@@ -214,15 +246,18 @@ export default function Inbox() {
 
   const batchAction = async (action: "archive" | "trash" | "spam" | "read") => {
     const ids = Array.from(selectedIds);
-    const patch: any =
+    const patch: Partial<Email> =
       action === "archive" ? { is_archived: true } :
       action === "trash" ? { is_trashed: true } :
       action === "spam" ? { is_spam: true, is_read: true } :
       { is_read: true };
-    setEmails((prev) => prev.map((e) => ids.includes(e.id) ? { ...e, ...patch } : e));
-    await supabase.from("emails").update(patch).in("id", ids);
-    setSelectedIds(new Set());
-    toast({ title: `${ids.length} emails atualizados` });
+    try {
+      await batchUpdateMutation.mutateAsync({ ids, patch });
+      setSelectedIds(new Set());
+      toast({ title: `${ids.length} emails atualizados` });
+    } catch (e: any) {
+      toast({ title: "Erro ao atualizar emails", description: e.message, variant: "destructive" });
+    }
   };
 
   const timeAgo = (d: string | null) => {
@@ -248,6 +283,27 @@ export default function Inbox() {
   };
 
   if (!orgId) return <div className="py-20 text-center text-muted-foreground">Crie uma organização em Configurações primeiro.</div>;
+
+  // Caixa de marketing sem conta conectada → CTA para Integrações
+  if (purpose === "marketing" && !account) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+          <Mail className="h-6 w-6 text-primary" />
+        </div>
+        <div>
+          <p className="font-semibold">Conta de Email Marketing não conectada</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Conecte a conta Gmail de marketing da empresa para receber e enviar
+            e-mails de marketing separados da caixa comercial.
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/settings/integrations">Conectar em Integrações</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-80px)] -m-6 bg-background">
@@ -310,7 +366,9 @@ export default function Inbox() {
                 <span className="ml-2 text-xs text-muted-foreground">{selectedIds.size} selecionado(s)</span>
               </>
             ) : (
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">{filtered.length} mensagens</span>
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums truncate">
+                {account ? `${account.email_address} · ` : ""}{filtered.length} mensagens
+              </span>
             )}
           </div>
           <div className="px-3 pb-2">
@@ -605,7 +663,7 @@ export default function Inbox() {
         </>
       )}
 
-      <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} onSent={() => { if (orgId) qc.invalidateQueries({ queryKey: emailsKeys.all(orgId) }); }} />
+      <EmailComposeModal open={composeOpen} onOpenChange={setComposeOpen} defaultPurpose={purpose} onSent={() => { if (orgId) qc.invalidateQueries({ queryKey: emailsKeys.all(orgId) }); }} />
     </div>
   );
 }

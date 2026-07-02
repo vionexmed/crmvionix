@@ -16,11 +16,13 @@ export function useDealActivities(dealId: string | undefined) {
   });
 }
 
-export function useActivities() {
+export function useActivities(type?: Parameters<typeof activitiesApi.list>[1]) {
   const { orgId } = useOrg();
   return useQuery({
-    queryKey: activitiesKeys.all(orgId ?? ""),
-    queryFn: () => activitiesApi.list(orgId!),
+    queryKey: type
+      ? ([...activitiesKeys.all(orgId ?? ""), type] as const)
+      : activitiesKeys.all(orgId ?? ""),
+    queryFn: () => activitiesApi.list(orgId!, type),
     enabled: !!orgId,
   });
 }

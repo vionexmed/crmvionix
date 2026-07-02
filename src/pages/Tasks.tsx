@@ -32,7 +32,7 @@ import {
   useDeleteActivities,
 } from "@/hooks/queries/useActivities";
 import { useMembers } from "@/hooks/queries/useMembers";
-import { useContacts } from "@/hooks/queries/useContacts";
+import { useContactsPicker } from "@/hooks/queries/useContacts";
 import { useDeals } from "@/hooks/queries/useDeals";
 import { useOrg } from "@/hooks/useOrg";
 import type { Database } from "@/integrations/supabase/types";
@@ -71,16 +71,17 @@ export default function Tasks() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: allActivities = [] } = useActivities();
+  const { data: allActivities = [] } = useActivities("task");
   const { data: membersData = [] } = useMembers();
-  const { data: contactsResult } = useContacts({ pageSize: 5000 });
+  // Lista leve p/ o select de contatos — sem o teto de 1000 linhas e inclui leads
+  const { data: contactsPicker = [] } = useContactsPicker();
   const { data: dealsResult } = useDeals();
 
   const tasks = useMemo(
     () => (allActivities as Activity[]).filter((a) => a.type === "task"),
     [allActivities]
   );
-  const contacts: Contact[] = contactsResult?.data ?? [];
+  const contacts = contactsPicker as unknown as Contact[];
   const deals: Deal[] = (dealsResult?.data ?? []) as Deal[];
   const members: Profile[] = membersData as Profile[];
 

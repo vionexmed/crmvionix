@@ -51,13 +51,15 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
   }, [orgId]);
 
   const fetchEmailConnections = useCallback(async () => {
-    if (!userId) return;
+    if (!orgId) return;
+    // Contas da EMPRESA: visíveis para toda a org, independente de quem conectou
     const { data } = await supabase
       .from("email_connections")
-      .select("id, user_id, provider, email_address, label, purpose, is_active, created_at")
-      .eq("user_id", userId) as any;
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("is_active", true) as any;
     setEmailConnections(data || []);
-  }, [userId]);
+  }, [orgId]);
 
   useEffect(() => { fetchConfigs(); fetchEmailConnections(); }, [fetchConfigs, fetchEmailConnections]);
 
@@ -227,7 +229,15 @@ export function IntegrationsTab({ orgId, userId }: { orgId: string | null; userI
   };
 
   const handleDisconnectGmail = async (connectionId: string) => {
-    await supabase.from("email_connections").delete().eq("id", connectionId);
+    // Edge function apaga conexão + tokens OAuth (tokens não são acessíveis pelo cliente)
+    const res = await supabase.functions.invoke("gmail-disconnect", {
+      body: { connection_id: connectionId },
+    });
+    const errMsg = res.error?.message || (res.data as { error?: string } | null)?.error;
+    if (errMsg) {
+      toast({ title: "Erro ao desconectar", description: errMsg, variant: "destructive" });
+      return;
+    }
     fetchEmailConnections();
     toast({ title: "Conta Gmail desconectada" });
   };

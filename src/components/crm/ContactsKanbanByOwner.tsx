@@ -34,10 +34,9 @@ function ContactCard({
   company?: Company | null;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: contact.id });
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 }
-    : undefined;
+  // O clone visual do drag é o DragOverlay — o card original só fica translúcido
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: contact.id });
+  const style = isDragging ? { opacity: 0.4 } : undefined;
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} className="group">
@@ -57,7 +56,7 @@ function ContactCard({
               <div className="flex items-center gap-2">
                 <Avatar className="h-6 w-6 shrink-0">
                   <AvatarFallback className="bg-primary/10 text-primary text-[9px]">
-                    {contact.first_name[0]}{contact.last_name?.[0] || ""}
+                    {contact.first_name?.[0] || "?"}{contact.last_name?.[0] || ""}
                   </AvatarFallback>
                 </Avatar>
                 <p className="truncate text-sm font-medium">{contact.first_name} {contact.last_name}</p>
@@ -190,13 +189,8 @@ export function ContactsKanbanByOwner({
     onOwnerChange(contactId, newOwnerId);
   };
 
-  // Build columns: "unassigned" + each member that has contacts or exists
-  const membersWithContacts = new Set(
-    contacts.map((c) => c.owner_id).filter(Boolean)
-  );
-  const visibleMembers = members.filter(
-    (m) => membersWithContacts.has(m.id) || true // show all members
-  );
+  // Colunas: "sem responsável" + todos os membros da equipe
+  const visibleMembers = members;
 
   const unassignedContacts = contacts.filter((c) => !c.owner_id);
 

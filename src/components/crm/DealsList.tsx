@@ -33,10 +33,13 @@ interface DealsListProps {
   onSelectionChange: (s: Set<string>) => void;
   onDealClick: (d: DealWithRelations) => void;
   onBatchAction: (action: "won" | "lost" | "delete") => void;
+  /** Exclusão em lote é restrita a admin/owner */
+  canDelete?: boolean;
 }
 
 export function DealsList({
   deals, stages, selectedDeals, onSelectionChange, onDealClick, onBatchAction,
+  canDelete = true,
 }: DealsListProps) {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -93,9 +96,11 @@ export function DealsList({
           <Button size="sm" variant="outline" onClick={() => onBatchAction("lost")}>
             <XCircle className="mr-1 h-3.5 w-3.5 text-destructive" />Perdidos
           </Button>
-          <Button size="sm" variant="destructive" onClick={() => onBatchAction("delete")}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
-          </Button>
+          {canDelete && (
+            <Button size="sm" variant="destructive" onClick={() => onBatchAction("delete")}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />Excluir
+            </Button>
+          )}
         </div>
       )}
 

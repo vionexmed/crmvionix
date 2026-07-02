@@ -359,7 +359,7 @@ export default function DealDetail() {
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {contact.first_name[0]}{contact.last_name?.[0]}
+                      {contact.first_name?.[0] || "?"}{contact.last_name?.[0] || ""}
                     </AvatarFallback>
                   </Avatar>
                   <div>

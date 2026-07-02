@@ -42,7 +42,7 @@ export default function Setup() {
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
     if (!loading && !user) {
-      navigate("/login", { replace: true });
+      navigate("/", { replace: true }); // login fica na raiz — /login não existe
     }
   }, [loading, user, navigate]);
 

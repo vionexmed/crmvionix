@@ -65,26 +65,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Send magic link invite
-    const { data: inviteData, error: inviteError } =
-      await serviceClient.auth.admin.inviteUserByEmail(email, {
-        data: { org_id, role: role || "member" },
-      });
-
-    if (inviteError) {
-      return new Response(JSON.stringify({ error: inviteError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Record invitation
-    await serviceClient.from("invitations").insert({
+    // IMPORTANTE: registrar o convite ANTES de enviar o e-mail —
+    // o trigger handle_new_user lê a tabela invitations para atribuir
+    // org e papel quando o convidado abre o link.
+    const { error: recordError } = await serviceClient.from("invitations").insert({
       org_id,
       email,
       role: role || "member",
       invited_by: callerId,
     });
+    if (recordError) {
+      return new Response(JSON.stringify({ error: recordError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Send magic link invite → landing na página de aceite (nome + senha)
+    const origin = req.headers.get("origin") || Deno.env.get("SITE_URL") || "";
+    const { data: inviteData, error: inviteError } =
+      await serviceClient.auth.admin.inviteUserByEmail(email, {
+        data: { org_id, role: role || "member" },
+        ...(origin ? { redirectTo: `${origin}/accept-invite` } : {}),
+      });
+
+    if (inviteError) {
+      // E-mail falhou → remove o registro de convite para não deixar lixo
+      await serviceClient.from("invitations").delete()
+        .eq("org_id", org_id).eq("email", email).is("accepted_at", null);
+      return new Response(JSON.stringify({ error: inviteError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     return new Response(JSON.stringify({ success: true, user: inviteData.user }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

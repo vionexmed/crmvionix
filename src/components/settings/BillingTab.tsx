@@ -14,7 +14,7 @@ export function BillingTab({ orgId }: { orgId: string | null }) {
 
   useEffect(() => {
     if (!orgId) return;
-    supabase.from("organizations").select("*").eq("id", orgId).single().then(({ data }) => setOrg(data));
+    supabase.from("organizations").select("*").eq("id", orgId).maybeSingle().then(({ data }) => setOrg(data));
     Promise.all([
       supabase.from("contacts").select("id", { count: "exact", head: true }).eq("org_id", orgId),
       supabase.from("deals").select("id", { count: "exact", head: true }).eq("org_id", orgId),

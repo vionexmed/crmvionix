@@ -22,7 +22,7 @@ export function NotificationsTab({ orgId, userId }: { orgId: string | null; user
 
   useEffect(() => {
     if (!orgId || !userId) return;
-    supabase.from("notification_preferences").select("*").eq("user_id", userId).eq("org_id", orgId).single()
+    supabase.from("notification_preferences").select("*").eq("user_id", userId).eq("org_id", orgId).maybeSingle()
       .then(({ data }: any) => {
         if (data) setPrefs(data);
         setLoaded(true);

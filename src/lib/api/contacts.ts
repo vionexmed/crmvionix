@@ -27,51 +27,94 @@ export interface ContactListResult {
   count: number;
 }
 
-export const contactsApi = {
-  list: async (orgId: string, params: ContactListParams = {}): Promise<ContactListResult> => {
-    const {
-      page = 0,
-      pageSize = PAGE_SIZE,
-      search,
-      status,
-      ownerId,
-      companyId,
-      createdFrom,
-      createdTo,
-      sortKey = "created_at",
-      sortDir = "desc",
-    } = params;
+/**
+ * Sanitiza o termo de busca para uso em filtros .or() do PostgREST.
+ * Vírgulas, parênteses, aspas e barras quebram (ou alteram) a sintaxe do filtro.
+ */
+const sanitizeSearch = (s: string) => s.replace(/[,()"\\]/g, " ").trim();
 
-    let query = supabase
-      .from(TABLES.CONTACTS)
-      .select("*", { count: "exact" })
-      .eq("org_id", orgId)
-      .neq("status", "lead");
+const buildListQuery = (orgId: string, params: ContactListParams) => {
+  const { search, status, ownerId, companyId, createdFrom, createdTo, sortKey = "created_at", sortDir = "desc" } = params;
 
-    if (status && status !== "all") query = query.eq("status", status);
-    if (ownerId && ownerId !== "all") query = query.eq("owner_id", ownerId);
-    if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
-    if (createdFrom) query = query.gte("created_at", createdFrom);
-    if (createdTo) query = query.lte("created_at", createdTo);
-    if (search) {
+  let query = supabase
+    .from(TABLES.CONTACTS)
+    .select("*", { count: "exact" })
+    .eq("org_id", orgId)
+    .neq("status", "lead");
+
+  if (status && status !== "all") query = query.eq("status", status);
+  if (ownerId && ownerId !== "all") query = query.eq("owner_id", ownerId);
+  if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
+  if (createdFrom) query = query.gte("created_at", createdFrom);
+  if (createdTo) query = query.lte("created_at", createdTo);
+  if (search) {
+    const term = sanitizeSearch(search);
+    if (term) {
       query = query.or(
-        `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+        `first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%`
       );
     }
+  }
 
-    const ascending = sortDir === "asc";
-    if (sortKey === "name") {
-      query = query.order("first_name", { ascending }).order("last_name", { ascending });
-    } else {
-      query = query.order(sortKey, { ascending });
-    }
+  const ascending = sortDir === "asc";
+  if (sortKey === "name") {
+    query = query.order("first_name", { ascending }).order("last_name", { ascending });
+  } else {
+    query = query.order(sortKey, { ascending });
+  }
 
+  return query;
+};
+
+export const contactsApi = {
+  list: async (orgId: string, params: ContactListParams = {}): Promise<ContactListResult> => {
+    const { page = 0, pageSize = PAGE_SIZE } = params;
     const from = page * pageSize;
-    query = query.range(from, from + pageSize - 1);
+    const query = buildListQuery(orgId, params).range(from, from + pageSize - 1);
 
     const { data, error, count } = await query;
     if (error) throw error;
     return { data: data ?? [], count: count ?? 0 };
+  },
+
+  /**
+   * Busca TODOS os contatos (com os filtros atuais), paginando em blocos de
+   * 1000 para contornar o max-rows do PostgREST. Usado na exportação CSV e
+   * na visão kanban por vendedor.
+   */
+  listAll: async (orgId: string, params: ContactListParams = {}): Promise<Contact[]> => {
+    const CHUNK = 1000;
+    const all: Contact[] = [];
+    for (let page = 0; ; page++) {
+      const from = page * CHUNK;
+      const { data, error } = await buildListQuery(orgId, params).range(from, from + CHUNK - 1);
+      if (error) throw error;
+      all.push(...(data ?? []));
+      if (!data || data.length < CHUNK) break;
+    }
+    return all;
+  },
+
+  /**
+   * Lista leve para pickers (selects de contato em Negócios/Tarefas).
+   * Inclui leads também — tarefas/negócios podem referenciar leads.
+   */
+  listForPicker: async (orgId: string): Promise<Pick<Contact, "id" | "first_name" | "last_name" | "email" | "status">[]> => {
+    const CHUNK = 1000;
+    const all: Pick<Contact, "id" | "first_name" | "last_name" | "email" | "status">[] = [];
+    for (let page = 0; ; page++) {
+      const from = page * CHUNK;
+      const { data, error } = await supabase
+        .from(TABLES.CONTACTS)
+        .select("id, first_name, last_name, email, status")
+        .eq("org_id", orgId)
+        .order("first_name", { ascending: true })
+        .range(from, from + CHUNK - 1);
+      if (error) throw error;
+      all.push(...(data ?? []));
+      if (!data || data.length < CHUNK) break;
+    }
+    return all;
   },
 
   create: async (contact: ContactInsert): Promise<Contact> => {

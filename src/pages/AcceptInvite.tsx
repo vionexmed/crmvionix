@@ -36,6 +36,9 @@ export default function AcceptInvite() {
         setTimeout(check, 400);
         return;
       }
+      // Garante org + papel do convite (auto-cura caso o trigger não tenha
+      // encontrado o convite na criação do usuário)
+      try { await supabase.rpc("claim_pending_invitation"); } catch { /* migration ausente */ }
       const metaName = (session.user.user_metadata as Record<string, string> | null)?.full_name;
       if (metaName) setName(metaName);
       setChecking(false);

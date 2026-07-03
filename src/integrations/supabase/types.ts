@@ -2436,6 +2436,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_pending_invitation: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       create_organization_for_user: {
         Args: {
           p_name: string

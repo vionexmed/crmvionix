@@ -48,6 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (userId: string) => {
+    // Auto-cura de convite: se este e-mail tem convite pendente e o usuário
+    // caiu numa org própria vazia (fluxo de convite falhou), move para a org
+    // do convite com o papel correto antes de carregar o profile.
+    try {
+      const { data: claim } = await supabase.rpc("claim_pending_invitation");
+      if ((claim as { claimed?: boolean } | null)?.claimed) {
+        console.info("[AuthContext] convite pendente aplicado", claim);
+      }
+    } catch {
+      // RPC pode não existir ainda (migration não aplicada) — segue normal
+    }
+
     // Retry loop: profile is created by a DB trigger on signup, so it may not
     // exist yet on the very first auth event. Retry with backoff to cover the gap.
     // Extended to 5 attempts to cover slow triggers post-remix.

@@ -92,14 +92,28 @@ export default function Team() {
     if (!orgId || !inviteEmail) return;
     setInviting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await supabase.functions.invoke("invite-member", {
         body: { email: inviteEmail, role: inviteRole, org_id: orgId },
       });
-      if (res.error || res.data?.error) {
-        toast({ title: "Erro ao convidar", description: res.data?.error || res.error?.message, variant: "destructive" });
+      // Em erros não-2xx o corpo real fica em error.context — extrai a mensagem
+      let errMsg = (res.data as { error?: string } | null)?.error;
+      if (!errMsg && res.error) {
+        errMsg = res.error.message;
+        try {
+          const body = await (res.error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+          if (body?.error) errMsg = body.error;
+        } catch { /* mantém a mensagem genérica */ }
+      }
+      if (errMsg) {
+        toast({ title: "Erro ao convidar", description: errMsg, variant: "destructive" });
       } else {
-        toast({ title: "Convite enviado!", description: `Magic link enviado para ${inviteEmail}` });
+        const resent = (res.data as { resent?: boolean } | null)?.resent;
+        toast({
+          title: resent ? "Acesso reenviado!" : "Convite enviado!",
+          description: resent
+            ? `${inviteEmail} já tinha conta — enviamos um link de acesso; ao entrar, ele passa para a sua equipe.`
+            : `Magic link enviado para ${inviteEmail}`,
+        });
         setInviteEmail("");
         fetchAll();
       }

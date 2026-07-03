@@ -68,6 +68,9 @@ Deno.serve(async (req) => {
     // IMPORTANTE: registrar o convite ANTES de enviar o e-mail —
     // o trigger handle_new_user lê a tabela invitations para atribuir
     // org e papel quando o convidado abre o link.
+    // Reenvio: substitui convite pendente anterior (atualiza papel também).
+    await serviceClient.from("invitations").delete()
+      .eq("org_id", org_id).ilike("email", email).is("accepted_at", null);
     const { error: recordError } = await serviceClient.from("invitations").insert({
       org_id,
       email,
@@ -90,7 +93,52 @@ Deno.serve(async (req) => {
       });
 
     if (inviteError) {
-      // E-mail falhou → remove o registro de convite para não deixar lixo
+      const emailExists =
+        (inviteError as { code?: string }).code === "email_exists" ||
+        /already.*(registered|exists)/i.test(inviteError.message || "");
+
+      if (emailExists) {
+        // O usuário auth já existe (convite anterior ou cadastro próprio).
+        // Se já é membro DESTA org, não há o que convidar.
+        const { data: existingProfile } = await serviceClient
+          .from("profiles")
+          .select("id, org_id")
+          .ilike("email", email)
+          .maybeSingle();
+        if (existingProfile?.org_id === org_id) {
+          await serviceClient.from("invitations").delete()
+            .eq("org_id", org_id).eq("email", email).is("accepted_at", null);
+          return new Response(JSON.stringify({ error: "Este e-mail já é membro da sua equipe." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Usuário existe mas está fora da org: mantém o convite pendente e
+        // envia um magic link de LOGIN. Ao entrar, claim_pending_invitation()
+        // move o usuário para esta org com o papel convidado.
+        const plainClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+        );
+        const { error: otpError } = await plainClient.auth.signInWithOtp({
+          email,
+          options: origin ? { emailRedirectTo: `${origin}/accept-invite` } : undefined,
+        });
+        if (otpError) {
+          await serviceClient.from("invitations").delete()
+            .eq("org_id", org_id).eq("email", email).is("accepted_at", null);
+          return new Response(JSON.stringify({ error: `Falha ao reenviar acesso: ${otpError.message}` }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ success: true, resent: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Outro erro no envio → remove o registro de convite para não deixar lixo
       await serviceClient.from("invitations").delete()
         .eq("org_id", org_id).eq("email", email).is("accepted_at", null);
       return new Response(JSON.stringify({ error: inviteError.message }), {

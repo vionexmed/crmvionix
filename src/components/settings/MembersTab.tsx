@@ -54,7 +54,14 @@ export function MembersTab({ orgId, userId }: { orgId: string | null; userId?: s
     const res = await supabase.functions.invoke("invite-member", {
       body: { email: inviteEmail, role: inviteRole, org_id: orgId },
     });
-    const errMsg = res.error?.message || (res.data as { error?: string } | null)?.error;
+    let errMsg = (res.data as { error?: string } | null)?.error;
+    if (!errMsg && res.error) {
+      errMsg = res.error.message;
+      try {
+        const body = await (res.error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+        if (body?.error) errMsg = body.error;
+      } catch { /* mantém a mensagem genérica */ }
+    }
     if (errMsg) { toast({ title: "Erro ao convidar", description: errMsg, variant: "destructive" }); return; }
     setInviteEmail("");
     toast({ title: "Convite enviado!", description: `Magic link enviado para ${inviteEmail}` });

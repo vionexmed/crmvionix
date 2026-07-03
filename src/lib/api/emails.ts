@@ -54,7 +54,7 @@ export const emailsApi = {
       .select("*")
       .eq("org_id", orgId)
       .order("created_at", { ascending: false })
-      .limit(500);
+      .limit(200); // carga inicial menor; paginação por pasta fica para iteração futura
     if (error) throw error;
     return (data as Email[]) ?? [];
   },

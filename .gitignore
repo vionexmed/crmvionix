@@ -25,3 +25,11 @@ dist-ssr
 
 .env
 .env.local
+
+# Claude Flow artifacts
+.claude-flow/
+supabase/migrations/.claude-flow/
+
+# Extra lockfiles (projeto usa npm)
+bun.lock
+bun.lockb

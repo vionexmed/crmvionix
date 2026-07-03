@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.lead-capture]
 verify_jwt = false
+
+# Rastreio de abertura/clique — acessado pelo e-mail do destinatário, sem JWT
+[functions.email-track]
+verify_jwt = false

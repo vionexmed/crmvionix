@@ -279,13 +279,44 @@ serve(async (req) => {
     const ccList = cc ? (Array.isArray(cc) ? cc : String(cc).split(",").map((s: string) => s.trim()).filter(Boolean)) : [];
     const bccList = bcc ? (Array.isArray(bcc) ? bcc : String(bcc).split(",").map((s: string) => s.trim()).filter(Boolean)) : [];
 
+    // Pré-registra o e-mail para obter o id usado no rastreio de abertura/clique
+    const { data: preInserted } = await supabaseAdmin.from("emails").insert({
+      org_id,
+      user_id: userId,
+      contact_id: contact_id ?? null,
+      deal_id: deal_id ?? null,
+      direction: "outbound",
+      subject,
+      body_html: finalHtml ?? finalText ?? "",
+      from_email: fromEmail,
+      to_emails: toList,
+      cc_emails: ccList,
+      bcc_emails: bccList,
+      status: "sending",
+      provider: "gmail",
+      is_read: true,
+      synced_from: fromEmail,
+    }).select("id").maybeSingle();
+    const emailId = preInserted?.id as string | undefined;
+
+    // Injeta pixel de abertura + reescreve links para contagem de cliques
+    let trackedHtml = finalHtml;
+    if (emailId && trackedHtml) {
+      const trackBase = `${Deno.env.get("SUPABASE_URL")}/functions/v1/email-track`;
+      trackedHtml = trackedHtml.replace(
+        /href="(https?:\/\/[^"]+)"/gi,
+        (_m: string, u: string) => `href="${trackBase}?e=${emailId}&t=click&u=${encodeURIComponent(u)}"`,
+      );
+      trackedHtml += `<img src="${trackBase}?e=${emailId}&t=open" width="1" height="1" style="display:none" alt=""/>`;
+    }
+
     const raw = encodeRaw({
       to: toList.join(", "),
       from,
       cc: ccList.length ? ccList.join(", ") : undefined,
       bcc: bccList.length ? bccList.join(", ") : undefined,
       subject,
-      html: finalHtml,
+      html: trackedHtml,
       text: finalText,
     });
 
@@ -308,33 +339,23 @@ serve(async (req) => {
     const sendData = await sendRes.json();
     if (!sendRes.ok) {
       console.error("gmail send error", sendData);
+      // Remove o pré-registro — o e-mail não saiu
+      if (emailId) await supabaseAdmin.from("emails").delete().eq("id", emailId);
       return new Response(JSON.stringify({ error: "gmail_send_failed", details: sendData }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: inserted } = await supabaseAdmin.from("emails").insert({
-      org_id,
-      user_id: userId,
-      contact_id: contact_id ?? null,
-      deal_id: deal_id ?? null,
-      direction: "outbound",
-      subject,
-      body_html: finalHtml ?? finalText ?? "",
-      from_email: fromEmail,
-      to_emails: toList,
-      cc_emails: ccList,
-      bcc_emails: bccList,
-      status: "sent",
-      provider: "gmail",
-      sent_at: new Date().toISOString(),
-      thread_id: sendData.threadId ?? null,
-      message_id: sendData.id ?? null,
-      is_read: true,
-      synced_from: fromEmail, // conta de origem — separa as inboxes comercial/marketing
-    }).select("id").maybeSingle();
+    if (emailId) {
+      await supabaseAdmin.from("emails").update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        thread_id: sendData.threadId ?? null,
+        message_id: sendData.id ?? null,
+      }).eq("id", emailId);
+    }
 
-    return new Response(JSON.stringify({ ok: true, id: sendData.id, threadId: sendData.threadId, email_id: inserted?.id }), {
+    return new Response(JSON.stringify({ ok: true, id: sendData.id, threadId: sendData.threadId, email_id: emailId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

@@ -12,10 +12,8 @@ import {
 
 import {
   sumBy, fmtBRL, fmtNum, fmtPct,
-  leadSources, funnelData, dailyInvest, dailyRevenue, dailyLeads,
-  dailyChannelsCompare, sliceSeries, sliceCompareSeries, seriesFromTotal,
-  periodDays, type PeriodKey, type Campaign,
-} from "@/lib/marketingMockData";
+  periodDays, type PeriodKey, type FunnelStage, type LeadSource,
+} from "@/lib/marketing-utils";
 import { useMarketingData, type MarketingSource } from "@/hooks/useMarketingData";
 
 type TabKey = "visao" | "meta" | "google";
@@ -251,8 +249,9 @@ function PanelVisao({ data, days }: PanelProps) {
     return <MarketingEmptyState platform="Meta Ads ou Google Ads" tab="Visão Geral" />;
   }
 
-  // Série diária do período selecionado
-  const series = sliceCompareSeries(dailyChannelsCompare, days);
+  // Série diária REAL do período (Meta = insights sincronizados; Google sem integração)
+  const series = data.daily.map((d) => ({ day: d.day, Meta: d.spend, Google: 0 }));
+  const leadSources = data.sources;
 
   return (
     <div className="space-y-5">
@@ -263,13 +262,13 @@ function PanelVisao({ data, days }: PanelProps) {
         <HeroCard icon={Zap}        iconColor="var(--vx-purple)" label="ROAS consolidado"  value={roas}     format="multiplier" sub="Meta interna 3.0×" />
       </div>
 
-      {/* KPIs secundários */}
+      {/* KPIs secundários — sem deltas inventados: só valores reais do período */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 vx-stagger">
-        <Kpi icon={UsersIcon}          iconColor="var(--vx-navy)"       label="Leads totais"     value={totalLeads} format="num"        delta={18} />
-        <Kpi icon={DollarSign}         iconColor="var(--vx-amber)"      label="CPL médio"        value={cplMedio}   format="brl"        delta={-8} inverted />
-        <Kpi icon={Eye}                iconColor="var(--vx-navy)"       label="Impressões"       value={totalImp}   format="numCompact" delta={22} />
-        <Kpi icon={MousePointerClick}  iconColor="var(--vx-teal-light)" label="CTR médio"        value={ctrAvg}     format="pct"        delta={0.3} />
-        <Kpi icon={TargetIcon}         iconColor="var(--vx-teal-light)" label="Conversion rate"  value={cvrAvg}     format="pct"        delta={0.2} />
+        <Kpi icon={UsersIcon}          iconColor="var(--vx-navy)"       label="Leads totais"     value={totalLeads} format="num" />
+        <Kpi icon={DollarSign}         iconColor="var(--vx-amber)"      label="CPL médio"        value={cplMedio}   format="brl" />
+        <Kpi icon={Eye}                iconColor="var(--vx-navy)"       label="Impressões"       value={totalImp}   format="numCompact" />
+        <Kpi icon={MousePointerClick}  iconColor="var(--vx-teal-light)" label="CTR médio"        value={ctrAvg}     format="pct" />
+        <Kpi icon={TargetIcon}         iconColor="var(--vx-teal-light)" label="Conversion rate"  value={cvrAvg}     format="pct" />
       </div>
 
       {/* Bloco trend + lead sources */}
@@ -315,6 +314,9 @@ function PanelVisao({ data, days }: PanelProps) {
             </ResponsiveContainer>
           </div>
           <div className="space-y-1.5 mt-2">
+            {leadSources.length === 0 && (
+              <p className="text-[11px]" style={{ color: "var(--vx-text-3)" }}>Nenhum lead no período selecionado.</p>
+            )}
             {leadSources.slice(0, 4).map(s => (
               <div key={s.name} className="flex items-center gap-2 text-[11px]">
                 <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
@@ -328,7 +330,7 @@ function PanelVisao({ data, days }: PanelProps) {
 
       {/* Funil + comparativo de canais */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <FunnelCard />
+        <FunnelCard stages={data.funnel} />
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
           <ChannelMiniCard color="var(--vx-meta)"   bg="var(--vx-meta-bg)"   icon={Facebook} name="Meta Ads"    sub="Facebook · Instagram · Reels"
             activeCount={metaCamps.filter(c => c.status === "ativo").length}
@@ -377,9 +379,8 @@ function PanelMeta({ data, days }: PanelProps) {
   const cpl = conv ? inv / conv : 0;
   const ctr = imp ? (clicks / imp) * 100 : 0;
 
-  const spendSeries = seriesFromTotal(inv, days, 44);
-  const leadsSeries = seriesFromTotal(conv, days, 144);
-  const trend = spendSeries.map((d, i) => ({ day: d.day, Investido: d.value, Leads: leadsSeries[i].value }));
+  // Série diária REAL vinda do meta_insights (antes era uma curva sintética)
+  const trend = data.daily.map((d) => ({ day: d.day, Investido: d.spend, Leads: d.conversions }));
 
   const sorted = [...rows].sort((a, b) => b.conversoes - a.conversoes).slice(0, 6);
 
@@ -388,7 +389,7 @@ function PanelMeta({ data, days }: PanelProps) {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 vx-stagger">
         <Kpi icon={DollarSign}        iconColor="var(--vx-teal)"       label="Investido"    value={inv} format="brl" />
-        <Kpi icon={TrendingUp}        iconColor="var(--vx-green)"      label="Receita"      value={rev} format="brl"        delta={inv ? (rev / inv - 1) * 100 : 0} />
+        <Kpi icon={TrendingUp}        iconColor="var(--vx-green)"      label="Receita"      value={rev} format="brl" />
         <Kpi icon={Eye}               iconColor="var(--vx-navy)"       label="Impressões"   value={imp} format="numCompact" />
         <Kpi icon={Activity}          iconColor="var(--vx-grafite)"    label="Frequência"   value={freq} format="decimal" />
         <Kpi icon={DollarSign}        iconColor="var(--vx-amber)"      label="CPM"          value={cpm} format="brl" />
@@ -471,21 +472,16 @@ function PanelGoogle({ data, days }: PanelProps) {
   const qsAvg = rows.length ? rows.reduce((s, r) => s + (r.quality_score || 0), 0) / rows.length : 0;
   const isAvg = rows.length ? rows.reduce((s, r) => s + (r.impression_share || 0), 0) / rows.length : 0;
 
-  const spendSeries = seriesFromTotal(inv, days, 55);
-  const convSeries = seriesFromTotal(conv, days, 155);
-  const ctrSeries = spendSeries.map((d, i) => ({
-    day: d.day,
-    CTR: Number((ctr * (0.7 + (i % 5) * 0.12)).toFixed(2)),
-    CPC: Number((cpc * (0.85 + (i % 4) * 0.07)).toFixed(2)),
-  }));
-  const trend = spendSeries.map((d, i) => ({ day: d.day, Investido: d.value, Conversões: convSeries[i].value }));
+  // Google Ads ainda não tem sincronização de insights — séries zeradas honestas
+  const trend = data.daily.map((d) => ({ day: d.day, Investido: 0, Conversões: 0 }));
+  const ctrSeries = data.daily.map((d) => ({ day: d.day, CTR: 0, CPC: 0 }));
   const sorted = [...rows].sort((a, b) => b.conversoes - a.conversoes).slice(0, 6);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 vx-stagger">
         <Kpi icon={DollarSign}        iconColor="var(--vx-teal)"       label="Investido"     value={inv} format="brl" />
-        <Kpi icon={TrendingUp}        iconColor="var(--vx-green)"      label="Receita"       value={rev} format="brl"        delta={inv ? (rev / inv - 1) * 100 : 0} />
+        <Kpi icon={TrendingUp}        iconColor="var(--vx-green)"      label="Receita"       value={rev} format="brl" />
         <Kpi icon={Eye}               iconColor="var(--vx-navy)"       label="Impressões"    value={imp} format="numCompact" />
         <Kpi icon={BarChart3}         iconColor="var(--vx-teal-light)" label="Imp. Share"    value={isAvg} format="pct" />
         <Kpi icon={MousePointerClick} iconColor="var(--vx-teal-light)" label="Cliques"       value={clicks} format="numCompact" />
@@ -696,18 +692,18 @@ function ChannelMiniCard({ color, bg, icon: Icon, name, sub, activeCount, metric
 
 // ────────────── Funil ──────────────
 
-function FunnelCard() {
-  const maxNum = Math.max(1, parseFloat(funnelData[0].num.replace(/[^\d.]/g, "")) * 1000);
+function FunnelCard({ stages }: { stages: FunnelStage[] }) {
   const parseN = (s: string) => {
     const n = parseFloat(s.replace(/[^\d.]/g, ""));
     return s.toLowerCase().includes("k") ? n * 1000 : n;
   };
+  const maxNum = Math.max(1, ...stages.map((f) => parseN(f.num)));
   const colors = ["var(--vx-teal)", "var(--vx-teal-light)", "var(--vx-navy)", "var(--vx-purple)", "var(--vx-green)"];
   return (
     <div className="rounded-[10px] bg-card p-5 vx-fade-up vx-card-hover" style={{ border: "0.5px solid hsl(var(--border))" }}>
-      <SectionHeader title="Funil marketing → vendas" sub="Conversão por estágio" />
+      <SectionHeader title="Funil marketing → vendas" sub="Conversão por estágio (dados reais do período)" />
       <div className="space-y-3 mt-4">
-        {funnelData.map((f, i) => {
+        {stages.map((f, i) => {
           const value = parseN(f.num);
           const pct = (value / maxNum) * 100;
           const cor = colors[i] || "var(--vx-teal)";
@@ -731,171 +727,77 @@ function FunnelCard() {
 
 // ────────────── Subcards Meta ──────────────
 
-function PublicoCard() {
-  const pub = [
-    { nome: "Lookalike 1% clientes", cpl: 28.4 },
-    { nome: "Interesse direcionado", cpl: 52.1 },
-    { nome: "Retargeting pixel 30d", cpl: 25.3 },
-    { nome: "Tráfego frio amplo", cpl: 135.5 },
-  ];
-  const best = Math.min(...pub.map(p => p.cpl));
+/** Placeholder honesto para métricas que exigem sincronização detalhada ainda não integrada */
+function PendingDataCard({ title, sub, requirement }: { title: string; sub: string; requirement: string }) {
   return (
-    <SubCard title="CPL por público" sub="Quanto menor, melhor">
-      <div className="space-y-3.5">
-        {pub.map((p, i) => {
-          const cor = p.cpl <= 40 ? "var(--vx-green)" : p.cpl <= 80 ? "var(--vx-amber)" : "var(--vx-red)";
-          return (
-            <div key={p.nome}>
-              <div className="flex items-center justify-between text-[11px] mb-1">
-                <span style={{ color: "var(--vx-navy)" }}>{p.nome}</span>
-                <span className="font-medium tabular-nums" style={{ color: cor }}>R$ {p.cpl.toFixed(2)}</span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "hsl(var(--muted))" }}>
-                <div className="h-full rounded-full vx-grow-w" style={{ width: `${(best / p.cpl) * 100}%`, background: cor, animationDelay: `${i * 80}ms` }} />
-              </div>
-            </div>
-          );
-        })}
+    <SubCard title={title} sub={sub}>
+      <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+        <Database className="h-6 w-6" style={{ color: "var(--vx-text-3)" }} />
+        <p className="text-[11px] max-w-[220px]" style={{ color: "var(--vx-text-3)" }}>{requirement}</p>
       </div>
     </SubCard>
+  );
+}
+
+function PublicoCard() {
+  return (
+    <PendingDataCard
+      title="CPL por público"
+      sub="Quanto menor, melhor"
+      requirement="Requer sincronização de conjuntos de anúncios (ad sets) do Meta — ainda não integrada."
+    />
   );
 }
 
 function CriativoCard() {
-  const items = [
-    { nome: "Depoimento — Dr. Silva", formato: "Vídeo · Reels", ctr: 4.2, cpl: 22.8 },
-    { nome: "Antes e Depois — Carrossel", formato: "Carrossel · Feed", ctr: 2.8, cpl: 31.4 },
-    { nome: "Promo Limitada Outubro", formato: "Imagem · Stories", ctr: 1.4, cpl: 68.2 },
-    { nome: "Tutorial 30s — Como funciona", formato: "Vídeo · Reels", ctr: 3.6, cpl: 28.9 },
-  ];
   return (
-    <SubCard title="Top criativos" sub="Ordenado por CTR">
-      <div className="space-y-2">
-        {items.map(i => {
-          const corCtr = i.ctr >= 3 ? "var(--vx-green)" : i.ctr >= 1 ? "var(--vx-amber)" : "var(--vx-red)";
-          return (
-            <div key={i.nome} className="flex items-center gap-2.5 py-1.5 text-[11px]" style={{ borderBottom: "0.5px solid hsl(var(--border))" }}>
-              <div className="h-8 w-8 rounded grid place-items-center shrink-0" style={{ background: "var(--vx-meta-bg)" }}>
-                <Facebook className="h-3.5 w-3.5" style={{ color: "var(--vx-meta)" }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="truncate" style={{ color: "var(--vx-navy)" }}>{i.nome}</div>
-                <div className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>{i.formato}</div>
-              </div>
-              <div className="text-right tabular-nums">
-                <div style={{ color: corCtr, fontWeight: 500 }}>{i.ctr}%</div>
-                <div className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>R$ {i.cpl}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </SubCard>
+    <PendingDataCard
+      title="Top criativos"
+      sub="Ordenado por CTR"
+      requirement="Requer sincronização de anúncios individuais (ads) do Meta — ainda não integrada."
+    />
   );
 }
 
 function DemograficoCard() {
-  const dados = [
-    { faixa: "18–24", pct: 8 }, { faixa: "25–34", pct: 32 },
-    { faixa: "35–44", pct: 38 }, { faixa: "45–54", pct: 16 }, { faixa: "55+", pct: 6 },
-  ];
   return (
-    <SubCard title="Demografia" sub="% leads por faixa etária">
-      <div className="h-[180px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={dados} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="faixa" tick={{ fontSize: 10, fill: "var(--vx-text-3)" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: "var(--vx-text-3)" }} axisLine={false} tickLine={false} width={32} />
-            <Tooltip content={<VxTooltip suffix="%" />} />
-            <Bar dataKey="pct" fill="var(--vx-meta)" radius={[4, 4, 0, 0]} animationDuration={900} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </SubCard>
+    <PendingDataCard
+      title="Demografia"
+      sub="% leads por faixa etária"
+      requirement="Requer insights demográficos do Meta — ainda não integrados."
+    />
   );
 }
 
 // ────────────── Subcards Google ──────────────
 
 function KeywordsCard() {
-  const kws = [
-    { termo: "crm para clínica médica", match: "Exata", ctr: 6.8, conv: 48 },
-    { termo: "sistema gestão pacientes", match: "Frase", ctr: 3.4, conv: 62 },
-    { termo: "software médico", match: "Ampla mod.", ctr: 1.8, conv: 28 },
-    { termo: "gestão consultório", match: "Ampla", ctr: 0.9, conv: 14 },
-  ];
   return (
-    <SubCard title="Palavras-chave" sub="Performance Search">
-      <div className="space-y-2">
-        {kws.map(k => {
-          const cor = k.ctr >= 3 ? "var(--vx-green)" : k.ctr >= 1 ? "var(--vx-amber)" : "var(--vx-red)";
-          return (
-            <div key={k.termo} className="flex items-center gap-2 py-1.5 text-[11px]" style={{ borderBottom: "0.5px solid hsl(var(--border))" }}>
-              <div className="flex-1 min-w-0">
-                <div className="truncate" style={{ color: "var(--vx-navy)" }}>{k.termo}</div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded mt-0.5 inline-block" style={{ background: "var(--vx-teal-bg)", color: "var(--vx-teal)" }}>{k.match}</span>
-              </div>
-              <div className="text-right tabular-nums">
-                <div style={{ color: cor, fontWeight: 500 }}>{k.ctr}%</div>
-                <div className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>{k.conv} conv</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </SubCard>
+    <PendingDataCard
+      title="Palavras-chave"
+      sub="Performance Search"
+      requirement="Requer integração com Google Ads — ainda não disponível."
+    />
   );
 }
 
 function ImpShareCard() {
-  const bars = [
-    { label: "IS conquistado", value: 72, color: "var(--vx-green)" },
-    { label: "Perdido por orçamento", value: 18, color: "var(--vx-amber)" },
-    { label: "Perdido por rank", value: 10, color: "var(--vx-red)" },
-  ];
   return (
-    <SubCard title="Impression Share" sub="Onde estou perdendo">
-      <div className="space-y-3.5">
-        {bars.map((b, i) => (
-          <div key={b.label}>
-            <div className="flex justify-between text-[11px] mb-1">
-              <span style={{ color: "var(--vx-navy)" }}>{b.label}</span>
-              <span className="font-medium tabular-nums" style={{ color: b.color }}>{b.value}%</span>
-            </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "hsl(var(--muted))" }}>
-              <div className="h-full rounded-full vx-grow-w" style={{ width: `${b.value}%`, background: b.color, animationDelay: `${i * 80}ms` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </SubCard>
+    <PendingDataCard
+      title="Impression Share"
+      sub="Onde estou perdendo"
+      requirement="Requer integração com Google Ads — ainda não disponível."
+    />
   );
 }
 
 function QualityScoreCard() {
-  const v = 6.5;
-  const pct = (v / 10) * 100;
   return (
-    <SubCard title="Quality Score" sub="Saúde geral das campanhas">
-      <div className="flex flex-col items-center justify-center py-4">
-        <div className="relative h-28 w-28">
-          <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="8" />
-            <circle
-              cx="50" cy="50" r="42" fill="none" stroke="var(--vx-amber)" strokeWidth="8" strokeLinecap="round"
-              strokeDasharray={`${(pct / 100) * 264} 264`}
-              style={{ transition: "stroke-dasharray 1s ease-out" }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-[24px] font-medium tabular-nums" style={{ color: "var(--vx-navy)" }}>{v}</div>
-            <div className="text-[10px]" style={{ color: "var(--vx-text-3)" }}>/ 10</div>
-          </div>
-        </div>
-        <div className="text-[11px] mt-3" style={{ color: "var(--vx-amber)" }}>Bom — pode melhorar</div>
-      </div>
-    </SubCard>
+    <PendingDataCard
+      title="Quality Score"
+      sub="Saúde geral das campanhas"
+      requirement="Requer integração com Google Ads — ainda não disponível."
+    />
   );
 }
 

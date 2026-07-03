@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { captureException } from "../_shared/sentry.ts";
 import { createLogger } from "../_shared/logger.ts";
+import { sendViaOrgAccount, renderTemplate } from "../_shared/gmail-sender.ts";
 
 const log = createLogger("process-automation");
 
@@ -10,12 +11,218 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+/** Avalia condições + executa ações de UMA automação, com stats e log. */
+async function runAutomation(supabase: any, auto: any, trigger_payload: any): Promise<{ status: string; actions?: any[] }> {
+  const start = Date.now();
+  const org_id = auto.org_id;
+
+  // Evaluate conditions (simplified)
+  const conditions = auto.conditions || [];
+  let conditionsMet = true;
+  for (const cond of conditions) {
+    const fieldVal = trigger_payload?.[cond.field];
+    switch (cond.operator) {
+      case "equals":
+        if (String(fieldVal) !== String(cond.value)) conditionsMet = false;
+        break;
+      case "not_equals":
+        if (String(fieldVal) === String(cond.value)) conditionsMet = false;
+        break;
+      case "greater_than":
+        if (Number(fieldVal) <= Number(cond.value)) conditionsMet = false;
+        break;
+      case "less_than":
+        if (Number(fieldVal) >= Number(cond.value)) conditionsMet = false;
+        break;
+      case "contains":
+        if (!String(fieldVal).includes(String(cond.value))) conditionsMet = false;
+        break;
+      case "not_contains":
+        if (String(fieldVal).includes(String(cond.value))) conditionsMet = false;
+        break;
+    }
+    if (!conditionsMet) break;
+  }
+
+  if (!conditionsMet) {
+    await supabase.from("automation_logs").insert({
+      org_id,
+      automation_id: auto.id,
+      status: "skipped",
+      trigger_payload,
+      actions_result: { reason: "Conditions not met" },
+      duration_ms: Date.now() - start,
+    });
+    return { status: "skipped" };
+  }
+
+  // Execute actions sequentially
+  const actionsResult: any[] = [];
+  for (const action of auto.actions || []) {
+    try {
+      const result = await executeAction(supabase, org_id, action, trigger_payload);
+      actionsResult.push({ type: action.type, status: "ok", result });
+    } catch (err: any) {
+      actionsResult.push({ type: action.type, status: "error", error: err.message });
+      // Continue executing remaining actions
+    }
+  }
+
+  const hasErrors = actionsResult.some((r) => r.status === "error");
+  const duration = Date.now() - start;
+
+  await supabase
+    .from("automations")
+    .update({
+      run_count: (auto.run_count || 0) + 1,
+      error_count: hasErrors ? (auto.error_count || 0) + 1 : auto.error_count,
+      last_run_at: new Date().toISOString(),
+    })
+    .eq("id", auto.id);
+
+  await supabase.from("automation_logs").insert({
+    org_id,
+    automation_id: auto.id,
+    status: hasErrors ? "partial_error" : "success",
+    trigger_payload,
+    actions_result: actionsResult,
+    duration_ms: duration,
+    error_message: hasErrors
+      ? actionsResult.filter((r) => r.status === "error").map((r) => r.error).join("; ")
+      : null,
+  });
+
+  return { status: hasErrors ? "partial_error" : "success", actions: actionsResult };
+}
+
+/** Uma automação casa com um evento da fila? (mapeamento gatilho × evento) */
+function automationMatchesEvent(auto: any, event: { event_type: string; payload: any }): boolean {
+  const t = auto.trigger?.type as string;
+  const cfg = auto.trigger?.config || {};
+  const p = event.payload || {};
+
+  switch (event.event_type) {
+    case "contact.created":
+      return t === "contact.created";
+    case "contact.updated": {
+      if (t === "contact.updated") return true;
+      if (t === "field.changed") {
+        const changed: string[] = Array.isArray(p.changed_fields) ? p.changed_fields : [];
+        return !cfg.field || changed.includes(cfg.field);
+      }
+      if (t === "score.threshold") {
+        const threshold = Number(cfg.threshold ?? 70);
+        const oldScore = Number(p.old_lead_score ?? 0);
+        const newScore = Number(p.lead_score ?? 0);
+        return (cfg.direction === "below")
+          ? oldScore > threshold && newScore <= threshold
+          : oldScore < threshold && newScore >= threshold;
+      }
+      return false;
+    }
+    case "deal.stage_changed":
+      return t === "deal.stage_changed";
+    case "deal.won":
+      return t === "deal.won";
+    case "deal.lost":
+      return t === "deal.lost";
+    case "activity.created":
+      return t === "activity.created";
+    default:
+      return false;
+  }
+}
+
+/** Modo agendado (cron): drena a fila de eventos + gatilhos de data relativa */
+async function runScheduledBatch(supabase: any) {
+  const summary = { events: 0, executed: 0, date_relative: 0 };
+
+  // 1. Eventos pendentes
+  const { data: events } = await supabase
+    .from("automation_events")
+    .select("*")
+    .is("processed_at", null)
+    .order("created_at", { ascending: true })
+    .limit(100);
+
+  if (events?.length) {
+    const { data: autos } = await supabase
+      .from("automations")
+      .select("*")
+      .eq("is_active", true);
+
+    for (const event of events) {
+      const matching = (autos || []).filter(
+        (a: any) => a.org_id === event.org_id && automationMatchesEvent(a, event)
+      );
+      for (const auto of matching) {
+        try {
+          await runAutomation(supabase, auto, event.payload);
+          summary.executed++;
+        } catch (e) {
+          console.error("automation run failed", auto.id, e);
+        }
+      }
+      await supabase
+        .from("automation_events")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("id", event.id);
+      summary.events++;
+    }
+  }
+
+  // 2. Gatilhos de data relativa (inatividade) — avaliados a cada execução
+  const { data: dateAutos } = await supabase
+    .from("automations")
+    .select("*")
+    .eq("is_active", true)
+    .eq("trigger->>type", "date.relative");
+
+  for (const auto of dateAutos || []) {
+    const cfg = auto.trigger?.config || {};
+    const daysInactive = Number(cfg.days_inactive ?? 14);
+    const cutoff = new Date(Date.now() - daysInactive * 86_400_000).toISOString();
+    const entity = cfg.entity === "deal" ? "deals" : "contacts";
+    const idKey = cfg.entity === "deal" ? "deal_id" : "contact_id";
+
+    const { data: stale } = await supabase
+      .from(entity)
+      .select("id")
+      .eq("org_id", auto.org_id)
+      .lt("updated_at", cutoff)
+      .limit(20);
+
+    for (const row of stale || []) {
+      // Dedup: não dispara de novo para a mesma entidade nos últimos 7 dias
+      const { data: prior } = await supabase
+        .from("automation_logs")
+        .select("id")
+        .eq("automation_id", auto.id)
+        .eq(`trigger_payload->>${idKey}`, row.id)
+        .gte("executed_at", new Date(Date.now() - 7 * 86_400_000).toISOString())
+        .limit(1);
+      if (prior?.length) continue;
+
+      try {
+        await runAutomation(supabase, auto, { [idKey]: row.id, days_inactive: daysInactive });
+        summary.date_relative++;
+      } catch (e) {
+        console.error("date.relative run failed", auto.id, e);
+      }
+    }
+  }
+
+  return summary;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const start = Date.now();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
@@ -23,149 +230,48 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return json({ error: "Unauthorized" }, 401);
     }
+    const bearer = authHeader.replace("Bearer ", "").trim();
+
+    const body = await req.json().catch(() => ({}));
+
+    // ── Modo agendado (pg_cron chama com a service role key) ──
+    if (body.scheduled === true) {
+      if (bearer !== serviceKey) return json({ error: "Unauthorized" }, 401);
+      const summary = await runScheduledBatch(supabase);
+      return json({ ok: true, ...summary });
+    }
+
+    // ── Modo manual (usuário autenticado dispara uma automação específica) ──
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return json({ error: "Unauthorized" }, 401);
     }
     const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", userData.user.id).maybeSingle();
     const callerOrgId = profile?.org_id;
-    if (!callerOrgId) {
-      return new Response(JSON.stringify({ error: "No organization" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (!callerOrgId) return json({ error: "No organization" }, 403);
 
-    const body = await req.json();
-    const { automation_id, trigger_payload, retry_count = 0 } = body;
-    const org_id = callerOrgId;
+    const { automation_id, trigger_payload } = body;
+    if (!automation_id) return json({ error: "Missing automation_id" }, 400);
 
-    if (!automation_id || !org_id) {
-      return new Response(JSON.stringify({ error: "Missing automation_id or org_id" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Fetch automation
     const { data: auto, error: autoErr } = await supabase
       .from("automations")
       .select("*")
       .eq("id", automation_id)
-      .eq("org_id", org_id)
-      .single();
+      .eq("org_id", callerOrgId)
+      .maybeSingle();
 
-    if (autoErr || !auto) {
-      return new Response(JSON.stringify({ error: "Automation not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (autoErr || !auto) return json({ error: "Automation not found" }, 404);
+    if (!auto.is_active) return json({ error: "Automation is not active" }, 400);
 
-    if (!auto.is_active) {
-      return new Response(JSON.stringify({ error: "Automation is not active" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Evaluate conditions (simplified)
-    const conditions = auto.conditions || [];
-    let conditionsMet = true;
-    for (const cond of conditions) {
-      const fieldVal = trigger_payload?.[cond.field];
-      switch (cond.operator) {
-        case "equals":
-          if (String(fieldVal) !== String(cond.value)) conditionsMet = false;
-          break;
-        case "not_equals":
-          if (String(fieldVal) === String(cond.value)) conditionsMet = false;
-          break;
-        case "greater_than":
-          if (Number(fieldVal) <= Number(cond.value)) conditionsMet = false;
-          break;
-        case "less_than":
-          if (Number(fieldVal) >= Number(cond.value)) conditionsMet = false;
-          break;
-        case "contains":
-          if (!String(fieldVal).includes(String(cond.value))) conditionsMet = false;
-          break;
-        case "not_contains":
-          if (String(fieldVal).includes(String(cond.value))) conditionsMet = false;
-          break;
-      }
-      if (!conditionsMet) break;
-    }
-
-    if (!conditionsMet) {
-      await supabase.from("automation_logs").insert({
-        org_id,
-        automation_id,
-        status: "skipped",
-        trigger_payload,
-        actions_result: { reason: "Conditions not met" },
-        duration_ms: Date.now() - start,
-      });
-      return new Response(JSON.stringify({ status: "skipped", reason: "Conditions not met" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Execute actions sequentially
-    const actionsResult: any[] = [];
-    for (const action of auto.actions || []) {
-      try {
-        const result = await executeAction(supabase, org_id, action, trigger_payload);
-        actionsResult.push({ type: action.type, status: "ok", result });
-      } catch (err: any) {
-        actionsResult.push({ type: action.type, status: "error", error: err.message });
-        // Continue executing remaining actions
-      }
-    }
-
-    const hasErrors = actionsResult.some((r) => r.status === "error");
-    const duration = Date.now() - start;
-
-    // Update automation stats
-    await supabase
-      .from("automations")
-      .update({
-        run_count: (auto.run_count || 0) + 1,
-        error_count: hasErrors ? (auto.error_count || 0) + 1 : auto.error_count,
-        last_run_at: new Date().toISOString(),
-      })
-      .eq("id", automation_id);
-
-    // Log execution
-    await supabase.from("automation_logs").insert({
-      org_id,
-      automation_id,
-      status: hasErrors ? "partial_error" : "success",
-      trigger_payload,
-      actions_result: actionsResult,
-      duration_ms: duration,
-      error_message: hasErrors
-        ? actionsResult.filter((r) => r.status === "error").map((r) => r.error).join("; ")
-        : null,
-    });
-
-    // Retry on full failure
-    if (hasErrors && actionsResult.every((r) => r.status === "error") && retry_count < 3) {
-      // Could schedule a retry here via pg_cron or delayed fetch
-      console.log(`Automation ${automation_id} failed, retry ${retry_count + 1}/3`);
-    }
-
-    return new Response(JSON.stringify({ status: hasErrors ? "partial_error" : "success", actions: actionsResult, duration_ms: duration }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    const result = await runAutomation(supabase, auto, trigger_payload);
+    return json(result);
   } catch (err: any) {
     await captureException(err, { functionName: "process-automation" });
     log.error("automation failed", { message: err?.message });
-    const duration = Date.now() - start;
-    return new Response(JSON.stringify({ error: err.message, duration_ms: duration }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: err.message }, 500);
   }
 });
 
@@ -373,8 +479,40 @@ async function executeAction(supabase: any, orgId: string, action: any, payload:
       return { sent: true, phone: normalizedPhone };
     }
 
-    case "send_email_template":
-      return { template_id: cfg.template_id, note: "Email sending requires email integration" };
+    case "send_email_template": {
+      if (!payload?.contact_id) throw new Error("Sem contato para enviar e-mail");
+      const { data: contact } = await supabase
+        .from("contacts")
+        .select("id, first_name, last_name, email")
+        .eq("id", payload.contact_id)
+        .maybeSingle();
+      if (!contact?.email) throw new Error("Contato sem e-mail cadastrado");
+
+      let subject = cfg.subject || "";
+      let bodyHtml = cfg.body_html || "";
+      if (cfg.template_id) {
+        const { data: tpl } = await supabase
+          .from("email_templates")
+          .select("subject, body_html")
+          .eq("id", cfg.template_id)
+          .maybeSingle();
+        if (!tpl) throw new Error("Template de e-mail não encontrado");
+        subject = tpl.subject || subject;
+        bodyHtml = tpl.body_html || bodyHtml;
+      }
+      if (!subject || !bodyHtml) throw new Error("Template sem assunto ou corpo");
+
+      const { id } = await sendViaOrgAccount(supabase, {
+        orgId,
+        to: contact.email,
+        subject: renderTemplate(subject, contact),
+        html: renderTemplate(bodyHtml, contact),
+        purpose: "sales",
+        contactId: contact.id,
+        dealId: payload?.deal_id ?? null,
+      });
+      return { sent: true, email_id: id };
+    }
 
     case "remove_tag":
       return { tag_removed: cfg.tag_name, note: "Remove tag not fully implemented" };

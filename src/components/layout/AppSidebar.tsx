@@ -5,7 +5,7 @@ import {
   Target, Plug, Shield, Handshake, MessageSquare, TrendingUp,
   Megaphone, Mail,
 } from "lucide-react";
-import vionexLogo from "@/assets/Captura_de_Tela_2026-06-03_às_10.38.57-removebg-preview.png";
+import vionexLogo from "@/assets/vionex-logo-sidebar.png";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";

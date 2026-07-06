@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Edit2, Check, X, Phone, Mail, FileText, CheckSquare, CalendarDays,
-  Building2, Briefcase, Save, MapPin, Globe, Star,
+  Building2, Briefcase, Save, MapPin, Globe, Star, MessageCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -164,7 +164,8 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                 </Badge>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>
+            {/* mr-8 afasta do X de fechar do Sheet (que fica em right-4 top-4) */}
+            <Button variant="outline" size="sm" className="mr-8 shrink-0" onClick={() => setEditing(!editing)}>
               {editing ? <X className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
             </Button>
           </div>
@@ -274,12 +275,22 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                     <a href={`mailto:${contact.email}`} className="text-primary hover:underline">{contact.email}</a>
                   </div>
                 )}
-                {contact.phone && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{contact.phone.replace(/@s\.whatsapp\.net$/i, "").replace(/@lid$/i, "").replace(/@c\.us$/i, "")}</span>
-                  </div>
-                )}
+                {contact.phone && (() => {
+                  const cleanPhone = contact.phone.replace(/@s\.whatsapp\.net$/i, "").replace(/@lid$/i, "").replace(/@c\.us$/i, "");
+                  const digits = cleanPhone.replace(/\D/g, "");
+                  const wa = `https://wa.me/${digits.startsWith("55") ? digits : "55" + digits}`;
+                  return (
+                    <div className="flex items-center gap-3 text-sm">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span>{cleanPhone}</span>
+                      {digits && (
+                        <a href={wa} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-green-600 hover:underline">
+                          <MessageCircle className="h-3 w-3" />WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
                 {contact.title && (
                   <div className="flex items-center gap-3 text-sm">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />

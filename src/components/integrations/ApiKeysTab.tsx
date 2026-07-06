@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Key, Copy, EyeOff, Trash2 } from "lucide-react";
+import { Key, Copy, EyeOff, Eye, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type ApiKey = {
@@ -61,7 +61,15 @@ export function ApiKeysTab({ orgId, userId }: { orgId: string | null; userId?: s
 
   const revokeKey = async (id: string) => {
     await supabase.from("api_keys").update({ is_active: false } as any).eq("id", id);
-    toast({ title: "Chave revogada" });
+    toast({ title: "Chave revogada", description: "Você pode reativá-la a qualquer momento." });
+    fetchKeys();
+  };
+
+  const reactivateKey = async (id: string) => {
+    // Reativa uma chave revogada — o hash foi preservado, então a mesma
+    // chave volta a valer sem precisar reconfigurar quem já a usa
+    await supabase.from("api_keys").update({ is_active: true } as any).eq("id", id);
+    toast({ title: "Chave reativada" });
     fetchKeys();
   };
 
@@ -136,12 +144,16 @@ export function ApiKeysTab({ orgId, userId }: { orgId: string | null; userId?: s
                     <TableCell className="text-xs">{k.created_at ? new Date(k.created_at).toLocaleDateString("pt-BR") : "—"}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {k.is_active && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => revokeKey(k.id)}>
+                        {k.is_active ? (
+                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Revogar" onClick={() => revokeKey(k.id)}>
                             <EyeOff className="h-3 w-3" />
                           </Button>
+                        ) : (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-600" title="Reativar" onClick={() => reactivateKey(k.id)}>
+                            <Eye className="h-3 w-3" />
+                          </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteKey(k.id)}>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" title="Excluir" onClick={() => deleteKey(k.id)}>
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>

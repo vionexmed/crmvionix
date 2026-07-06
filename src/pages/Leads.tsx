@@ -25,7 +25,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import {
   UserPlus, Phone, Building2, FileText, Zap, Trash2, CheckCircle2,
   Clock, Globe, RefreshCw, Eye, XCircle, MessageCircle, Calendar,
-  Briefcase, AlignLeft,
+  Briefcase, AlignLeft, Mail,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -34,7 +34,9 @@ type Lead = {
   id: string;
   first_name: string;
   last_name: string | null;
+  email: string | null;
   phone: string | null;
+  title: string | null;
   created_at: string;
   metadata: Record<string, string> | null;
   companies: { name: string } | null;
@@ -46,9 +48,28 @@ const sourceLabel = (src: string) => {
     landing_page: "Landing Page",
     google_forms_vionex: "Google Forms",
     landing_page_teste: "Teste",
+    cadastro_likawave: "Cadastro Likawave",
   };
   return map[src] || src || "—";
 };
+
+// Campos extras do formulário Likawave (guardados em metadata) → rótulos amigáveis.
+// Só os que existirem no lead são exibidos, então serve para qualquer formulário.
+const CADASTRO_FIELDS: { key: string; label: string }[] = [
+  { key: "cidade", label: "Cidade / Estado" },
+  { key: "interesse", label: "Nível de interesse" },
+  { key: "instagram", label: "Instagram profissional" },
+  { key: "registro_profissional", label: "CRM / CREFITO" },
+  { key: "local_atuacao", label: "Local de atuação" },
+  { key: "usa_ondas_choque", label: "Já usa ondas de choque?" },
+  { key: "equipamento_atual", label: "Equipamento atual" },
+  { key: "tratamentos", label: "Tratamentos pretendidos" },
+  { key: "pacientes_mes", label: "Pacientes/mês (indicação)" },
+  { key: "agendamento_demo", label: "Agendamento de demonstração" },
+  { key: "autorizacao", label: "Autorização de contato" },
+  { key: "classificacao_lead", label: "Classificação (uso interno)" },
+  { key: "responsavel_cadastro", label: "Responsável pelo cadastro" },
+];
 
 export default function Leads() {
   const { orgId } = useOrg();
@@ -275,21 +296,48 @@ export default function Leads() {
                     </div>
                   </div>
 
+                  {viewing.email && (
+                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
+                      <Mail className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">E-mail</p>
+                        <a href={`mailto:${viewing.email}`} className="text-sm text-primary hover:underline break-all">{viewing.email}</a>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-start gap-3 rounded-md border border-border p-3">
                     <Briefcase className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Especialidade / Empresa</p>
-                      <span className="text-sm">{(viewing.companies as any)?.name || meta(viewing, "company") || "Não informado"}</span>
+                      <span className="text-sm">{viewing.title || (viewing.companies as any)?.name || meta(viewing, "company") || "Não informado"}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                    <AlignLeft className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Volume / Necessidade</p>
-                      <span className="text-sm leading-relaxed">{meta(viewing, "notes") || "Não informado"}</span>
+                  {meta(viewing, "notes") && (
+                    <div className="flex items-start gap-3 rounded-md border border-border p-3">
+                      <AlignLeft className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Observações</p>
+                        <span className="text-sm leading-relaxed whitespace-pre-line">{meta(viewing, "notes")}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Dados estruturados do cadastro (ex.: formulário Likawave) */}
+                  {CADASTRO_FIELDS.some((f) => meta(viewing, f.key)) && (
+                    <div className="rounded-md border border-border p-3 space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dados do cadastro</p>
+                      <div className="grid grid-cols-1 gap-y-2">
+                        {CADASTRO_FIELDS.filter((f) => meta(viewing, f.key)).map((f) => (
+                          <div key={f.key} className="flex items-start justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground shrink-0">{f.label}</span>
+                            <span className="text-right font-medium">{meta(viewing, f.key)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-start gap-3 rounded-md border border-border p-3">

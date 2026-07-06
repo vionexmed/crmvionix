@@ -82,6 +82,7 @@ serve(async (req) => {
     last_name,
     email,
     phone,
+    title,
     company,
     source,
     notes,
@@ -101,6 +102,7 @@ serve(async (req) => {
     last_name?: string;
     email?: string;
     phone?: string;
+    title?: string;
     company?: string;
     source?: string;
     notes?: string;
@@ -149,6 +151,7 @@ serve(async (req) => {
     last_name: resolvedLastName || null,
     email: email || null,
     phone: phone || null,
+    title: title || null, // especialidade / cargo
     status: "lead",
     metadata,
   };

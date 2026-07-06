@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrg } from "@/hooks/useOrg";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useLeads } from "@/hooks/queries/useContacts";
+import { useLeads, useUpdateContactsStatus } from "@/hooks/queries/useContacts";
 import { usePipelines } from "@/hooks/queries/usePipelines";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { contactsKeys } from "@/hooks/queries/useContacts";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -84,6 +85,8 @@ export default function Leads() {
   const [viewing, setViewing] = useState<Lead | null>(null);
   const [qualifying, setQualifying] = useState<Lead | null>(null);
   const [selectedPipeline, setSelectedPipeline] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { mutateAsync: updateStatus } = useUpdateContactsStatus();
 
   useEffect(() => {
     if (pipelines.length > 0 && !selectedPipeline) {
@@ -160,6 +163,39 @@ export default function Leads() {
     qualifyMutation.mutate({ lead: qualifying, pipelineId: selectedPipeline });
   };
 
+  // ── Seleção múltipla + aprovar/recusar em lote ──
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const allSelected = leads.length > 0 && leads.every((l) => selected.has(l.id));
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(leads.map((l) => l.id)));
+  };
+  const batchUpdate = async (status: "prospect" | "churned") => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    try {
+      // Aprovar = vira prospect e aparece em Contatos; Recusar = churned.
+      // Não cria negócio — para isso use "Qualificar" num lead específico.
+      await updateStatus({ ids, status });
+      setSelected(new Set());
+      toast({
+        title: status === "prospect"
+          ? `${ids.length} lead(s) aprovado(s)`
+          : `${ids.length} lead(s) recusado(s)`,
+        description: status === "prospect"
+          ? "Movidos para Contatos como prospect."
+          : "Marcados como recusados.",
+      });
+    } catch (e: any) {
+      toast({ title: "Erro na ação em lote", description: e.message, variant: "destructive" });
+    }
+  };
+
   const fullName = (lead: Lead) =>
     [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Sem nome";
 
@@ -186,6 +222,22 @@ export default function Leads() {
         }
       />
 
+      {/* Barra de ações em lote */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2">
+          <span className="text-sm font-medium">{selected.size} selecionado(s)</span>
+          <Button size="sm" className="h-8" onClick={() => batchUpdate("prospect")}>
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Aprovar
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/5" onClick={() => batchUpdate("churned")}>
+            <XCircle className="mr-1.5 h-3.5 w-3.5" />Recusar
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 ml-auto" onClick={() => setSelected(new Set())}>
+            Limpar seleção
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
           Carregando leads...
@@ -206,7 +258,8 @@ export default function Leads() {
         </Card>
       ) : (
         <div className="rounded-md border border-border overflow-hidden">
-          <div className="grid grid-cols-[2fr_1.4fr_1.4fr_2fr_1fr_1fr_auto] gap-3 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="grid grid-cols-[auto_2fr_1.4fr_1.4fr_2fr_1fr_1fr_auto] gap-3 px-4 py-2.5 bg-muted/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground items-center">
+            <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Selecionar todos" />
             <span>Nome</span>
             <span className="flex items-center gap-1"><Phone className="h-3 w-3" />Telefone</span>
             <span className="flex items-center gap-1"><Building2 className="h-3 w-3" />Empresa</span>
@@ -219,8 +272,9 @@ export default function Leads() {
           {leads.map((lead, i) => (
             <div
               key={lead.id}
-              className={`grid grid-cols-[2fr_1.4fr_1.4fr_2fr_1fr_1fr_auto] gap-3 px-4 py-3 items-center text-sm border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${i % 2 !== 0 ? "bg-muted/10" : ""}`}
+              className={`grid grid-cols-[auto_2fr_1.4fr_1.4fr_2fr_1fr_1fr_auto] gap-3 px-4 py-3 items-center text-sm border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${selected.has(lead.id) ? "bg-primary/5" : i % 2 !== 0 ? "bg-muted/10" : ""}`}
             >
+              <Checkbox checked={selected.has(lead.id)} onCheckedChange={() => toggleOne(lead.id)} aria-label={`Selecionar ${fullName(lead as Lead)}`} />
               <div className="flex items-center gap-2 min-w-0">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
                   {(lead.first_name || "?").charAt(0).toUpperCase()}

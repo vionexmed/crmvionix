@@ -31,3 +31,25 @@ export const PAISES = [
   "Brasil", "Portugal", "Estados Unidos", "Argentina", "Colômbia",
   "México", "Chile", "Uruguai", "Paraguai", "Peru", "Outro",
 ];
+
+/**
+ * Campos extras vindos de formulários de captação (ex.: Google Forms Likawave),
+ * guardados em contacts.metadata. Rótulos amigáveis para exibição na ficha do
+ * lead e do contato. Só os que tiverem valor são mostrados — contatos sem esses
+ * dados (ex.: landing page, cadastro manual) não exibem nada extra.
+ */
+export const CADASTRO_FIELDS: { key: string; label: string }[] = [
+  { key: "cidade", label: "Cidade / Estado" },
+  { key: "interesse", label: "Nível de interesse" },
+  { key: "instagram", label: "Instagram profissional" },
+  { key: "registro_profissional", label: "CRM / CREFITO" },
+  { key: "local_atuacao", label: "Local de atuação" },
+  { key: "usa_ondas_choque", label: "Já usa ondas de choque?" },
+  { key: "equipamento_atual", label: "Equipamento atual" },
+  { key: "tratamentos", label: "Tratamentos pretendidos" },
+  { key: "pacientes_mes", label: "Pacientes/mês (indicação)" },
+  { key: "agendamento_demo", label: "Agendamento de demonstração" },
+  { key: "autorizacao", label: "Autorização de contato" },
+  { key: "classificacao_lead", label: "Classificação (uso interno)" },
+  { key: "responsavel_cadastro", label: "Responsável pelo cadastro" },
+];

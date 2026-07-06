@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { AREAS_ATUACAO, PAISES } from "@/lib/contact-options";
+import { AREAS_ATUACAO, PAISES, CADASTRO_FIELDS } from "@/lib/contact-options";
 import type { Database } from "@/integrations/supabase/types";
 
 type Contact = Database["public"]["Tables"]["contacts"]["Row"];
@@ -327,6 +327,31 @@ export function ContactDrawer({ contact, onClose, onUpdate, companies, members }
                     </div>
                   ) : null;
                 })()}
+
+                {/* Dados do cadastro (formulário de captação) — cidade e interesse
+                    já aparecem acima, então são omitidos aqui para não repetir */}
+                {(() => {
+                  const m = (contact as any).metadata as Record<string, string> | null;
+                  if (!m) return null;
+                  const extra = CADASTRO_FIELDS.filter(
+                    (f) => f.key !== "cidade" && f.key !== "interesse" && m[f.key]
+                  );
+                  if (extra.length === 0) return null;
+                  return (
+                    <div className="rounded-md border border-border p-3 space-y-2 mt-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dados do cadastro</p>
+                      <div className="space-y-1.5">
+                        {extra.map((f) => (
+                          <div key={f.key} className="flex items-start justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground shrink-0">{f.label}</span>
+                            <span className="text-right font-medium">{m[f.key]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <span>Criado em</span>
                   <span>{contact.created_at ? new Date(contact.created_at).toLocaleDateString("pt-BR") : "—"}</span>

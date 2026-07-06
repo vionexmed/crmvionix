@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { CADASTRO_FIELDS } from "@/lib/contact-options";
 
 type Lead = {
   id: string;
@@ -54,23 +55,6 @@ const sourceLabel = (src: string) => {
   return map[src] || src || "—";
 };
 
-// Campos extras do formulário Likawave (guardados em metadata) → rótulos amigáveis.
-// Só os que existirem no lead são exibidos, então serve para qualquer formulário.
-const CADASTRO_FIELDS: { key: string; label: string }[] = [
-  { key: "cidade", label: "Cidade / Estado" },
-  { key: "interesse", label: "Nível de interesse" },
-  { key: "instagram", label: "Instagram profissional" },
-  { key: "registro_profissional", label: "CRM / CREFITO" },
-  { key: "local_atuacao", label: "Local de atuação" },
-  { key: "usa_ondas_choque", label: "Já usa ondas de choque?" },
-  { key: "equipamento_atual", label: "Equipamento atual" },
-  { key: "tratamentos", label: "Tratamentos pretendidos" },
-  { key: "pacientes_mes", label: "Pacientes/mês (indicação)" },
-  { key: "agendamento_demo", label: "Agendamento de demonstração" },
-  { key: "autorizacao", label: "Autorização de contato" },
-  { key: "classificacao_lead", label: "Classificação (uso interno)" },
-  { key: "responsavel_cadastro", label: "Responsável pelo cadastro" },
-];
 
 export default function Leads() {
   const { orgId } = useOrg();

@@ -108,6 +108,72 @@ function instalarGatilho() {
   Logger.log("Gatilho instalado com sucesso. As próximas respostas irão para o CRM.");
 }
 
+/**
+ * IMPORTAÇÃO ÚNICA das respostas JÁ existentes no formulário.
+ * Use isto para trazer os cadastros antigos (as respostas que chegaram antes
+ * de você instalar o gatilho). Rode UMA vez.
+ *
+ * Trava de segurança: guarda uma marca ao terminar; se rodar de novo, avisa e
+ * não faz nada (evita leads duplicados). Para forçar nova importação, rode
+ * "resetarImportacao" antes.
+ */
+function importarRespostasExistentes() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty("importacao_feita") === "sim") {
+    Logger.log("⚠️ A importação já foi feita antes. Para rodar de novo, execute 'resetarImportacao' primeiro.");
+    return;
+  }
+
+  var respostas = FormApp.getActiveForm().getResponses();
+  var enviados = 0, pulados = 0, erros = 0;
+
+  for (var r = 0; r < respostas.length; r++) {
+    var itens = respostas[r].getItemResponses();
+    var payload = { source: "cadastro_likawave", custom_fields: {} };
+
+    for (var i = 0; i < itens.length; i++) {
+      var titulo = itens[i].getItem().getTitle().trim();
+      var valor  = itens[i].getResponse();
+      if (Array.isArray(valor)) valor = valor.join(", ");
+      if (valor === "" || valor == null) continue;
+      var destino = MAPA[titulo];
+      if (!destino) continue;
+      if (CAMPOS_CONTATO.indexOf(destino) >= 0) payload[destino] = String(valor);
+      else payload.custom_fields[destino] = String(valor);
+    }
+
+    if (!payload.name) { pulados++; continue; }
+
+    try {
+      var res = UrlFetchApp.fetch(ENDPOINT, {
+        method: "post", contentType: "application/json",
+        headers: { "X-Api-Key": API_KEY },
+        payload: JSON.stringify(payload), muteHttpExceptions: true
+      });
+      if (res.getResponseCode() === 201) {
+        enviados++;
+      } else {
+        erros++;
+        Logger.log("Falha na resposta " + (r + 1) + " [" + res.getResponseCode() + "]: " + res.getContentText());
+      }
+    } catch (e) {
+      erros++;
+      Logger.log("Erro na resposta " + (r + 1) + ": " + e);
+    }
+    Utilities.sleep(300); // pausa leve entre envios (respeita o rate limit)
+  }
+
+  if (erros === 0) props.setProperty("importacao_feita", "sim");
+  Logger.log("Importação concluída: " + enviados + " enviados, " + pulados +
+             " pulados (sem nome), " + erros + " com erro. Total de respostas: " + respostas.length);
+}
+
+/** Libera nova importação (apaga a trava de segurança). Use com cuidado. */
+function resetarImportacao() {
+  PropertiesService.getScriptProperties().deleteProperty("importacao_feita");
+  Logger.log("Trava removida. Você pode rodar 'importarRespostasExistentes' novamente.");
+}
+
 /** Teste manual: cria um lead fictício no CRM sem precisar preencher o form. */
 function testarEnvio() {
   var res = UrlFetchApp.fetch(ENDPOINT, {

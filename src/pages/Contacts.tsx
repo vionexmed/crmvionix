@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCompanies } from "@/hooks/queries/useCompanies";
 import { useMembers } from "@/hooks/queries/useMembers";
 import { PAGE_SIZE } from "@/lib/api/contacts";
+import { getContactOrigin, ORIGIN_OPTIONS } from "@/lib/contact-options";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,8 +61,20 @@ interface ContactFilters {
   status?: string;
   ownerId?: string;
   companyId?: string;
+  origin?: string;
   createdFrom?: string;
   createdTo?: string;
+}
+
+/** Selo colorido indicando a origem do contato (de onde veio) */
+function OriginBadge({ metadata }: { metadata: unknown }) {
+  const o = getContactOrigin(metadata as Record<string, unknown> | null);
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: o.color }} />
+      {o.label}
+    </span>
+  );
 }
 
 export default function Contacts() {
@@ -333,6 +346,16 @@ export default function Contacts() {
             </Select>
           </div>
           <div className="space-y-1">
+            <Label className="text-xs">Origem</Label>
+            <Select value={filters.origin || "all"} onValueChange={(v) => setFilters({ ...filters, origin: v === "all" ? undefined : v })}>
+              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {ORIGIN_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs">Criado de</Label>
             <Input type="date" className="w-36 h-8 text-xs" value={filters.createdFrom ?? ""} onChange={(e) => setFilters({ ...filters, createdFrom: e.target.value || undefined })} />
           </div>
@@ -383,6 +406,7 @@ export default function Contacts() {
                 <TableHead className="hidden md:table-cell"><SortHeader label="Especialidade" field="title" /></TableHead>
                 <TableHead className="hidden md:table-cell">Telefone</TableHead>
                 <TableHead><SortHeader label="Status" field="status" /></TableHead>
+                <TableHead className="hidden lg:table-cell">Origem</TableHead>
                 <TableHead className="hidden lg:table-cell"><SortHeader label="Criado em" field="created_at" /></TableHead>
               </TableRow>
             </TableHeader>
@@ -440,13 +464,16 @@ export default function Contacts() {
                       {statusLabels[c.status || "lead"]}
                     </span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs hidden md:table-cell">
+                  <TableCell className="hidden lg:table-cell">
+                    <OriginBadge metadata={(c as Record<string, unknown>).metadata} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
                     {c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : "—"}
                   </TableCell>
                 </TableRow>
               ))}
               {contacts.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="py-10 text-center text-muted-foreground">Nenhum contato encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">Nenhum contato encontrado</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -471,9 +498,12 @@ export default function Contacts() {
                   </div>
                 </div>
                 {c.email && <p className="text-xs text-muted-foreground truncate">{c.email}</p>}
-                <span className={`vx-badge vx-badge-${c.status || "lead"}`}>
-                  {statusLabels[c.status || "lead"]}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className={`vx-badge vx-badge-${c.status || "lead"}`}>
+                    {statusLabels[c.status || "lead"]}
+                  </span>
+                  <OriginBadge metadata={(c as Record<string, unknown>).metadata} />
+                </div>
               </CardContent>
             </Card>
           ))}

@@ -139,6 +139,8 @@ export function CSVImportModal({ open, onOpenChange, onImported, entityType }: C
           // (leads ficam em /leads).
           const status = String(record.status || "").toLowerCase();
           record.status = VALID_CONTACT_STATUS.includes(status) ? status : "prospect";
+          // Marca a origem para diferenciar na lista de Contatos
+          record.metadata = { ...(record.metadata || {}), source: "csv_import" };
         }
         return record;
       });

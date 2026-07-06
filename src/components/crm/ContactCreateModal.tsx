@@ -84,6 +84,7 @@ export function ContactCreateModal({ open, onOpenChange, onCreated, companies }:
       owner_id: user?.id,
       company_id: resolvedCompanyId,
       metadata: {
+        source: "manual", // origem: cadastrado manualmente no CRM
         pais,
         cidade,
         area_atuacao: areaAtuacao,

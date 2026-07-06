@@ -18,6 +18,7 @@ export interface ContactListParams {
   companyId?: string;
   createdFrom?: string;
   createdTo?: string;
+  origin?: string; // filtro por origem (metadata.source): cadastro_likawave | landing | manual | import
   sortKey?: "name" | "email" | "status" | "created_at" | "title";
   sortDir?: "asc" | "desc";
 }
@@ -34,7 +35,7 @@ export interface ContactListResult {
 const sanitizeSearch = (s: string) => s.replace(/[,()"\\]/g, " ").trim();
 
 const buildListQuery = (orgId: string, params: ContactListParams) => {
-  const { search, status, ownerId, companyId, createdFrom, createdTo, sortKey = "created_at", sortDir = "desc" } = params;
+  const { search, status, ownerId, companyId, createdFrom, createdTo, origin, sortKey = "created_at", sortDir = "desc" } = params;
 
   let query = supabase
     .from(TABLES.CONTACTS)
@@ -47,6 +48,19 @@ const buildListQuery = (orgId: string, params: ContactListParams) => {
   if (companyId && companyId !== "all") query = query.eq("company_id", companyId);
   if (createdFrom) query = query.gte("created_at", createdFrom);
   if (createdTo) query = query.lte("created_at", createdTo);
+  // Filtro por origem (metadata.source). Agrupa valores em buckets amigáveis.
+  if (origin && origin !== "all") {
+    if (origin === "cadastro_likawave") {
+      query = query.eq("metadata->>source", "cadastro_likawave");
+    } else if (origin === "import") {
+      query = query.or("metadata->>source.eq.csv_import,metadata->>source.eq.import,metadata->>source.eq.importacao");
+    } else if (origin === "landing") {
+      query = query.or("metadata->>source.ilike.%landing%,metadata->>source.ilike.%site%,metadata->>source.ilike.%form%,metadata->>source.ilike.%web%,metadata->>source.ilike.%utm%");
+    } else if (origin === "manual") {
+      // manual = sem origem gravada (contatos antigos/manuais/CSV legados) ou explicitamente "manual"
+      query = query.or("metadata->>source.is.null,metadata->>source.eq.manual,metadata->>source.eq.");
+    }
+  }
   if (search) {
     const term = sanitizeSearch(search);
     if (term) {

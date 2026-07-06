@@ -33,6 +33,33 @@ export const PAISES = [
 ];
 
 /**
+ * Origem do contato, derivada de metadata.source. Usada para diferenciar
+ * visualmente (selo colorido) de onde cada contato veio, e para filtrar.
+ */
+export interface ContactOrigin {
+  key: "cadastro_likawave" | "landing" | "import" | "manual" | "other";
+  label: string;
+  color: string; // hex — cor da bolinha do selo
+}
+
+export function getContactOrigin(metadata: Record<string, unknown> | null | undefined): ContactOrigin {
+  const src = String((metadata as { source?: unknown } | null)?.source ?? "").toLowerCase();
+  if (src === "cadastro_likawave") return { key: "cadastro_likawave", label: "Cadastro Likawave", color: "#7C3AED" };
+  if (src === "csv_import" || src === "import" || src === "importacao") return { key: "import", label: "Importação", color: "#D97706" };
+  if (/landing|site|form|web|utm|ads?$/.test(src)) return { key: "landing", label: "Landing Page", color: "#2563EB" };
+  if (!src || src === "manual") return { key: "manual", label: "Manual", color: "#64748B" };
+  return { key: "other", label: String((metadata as { source?: unknown }).source), color: "#0D9488" };
+}
+
+/** Opções do filtro de origem na página Contatos */
+export const ORIGIN_OPTIONS: { value: string; label: string }[] = [
+  { value: "cadastro_likawave", label: "Cadastro Likawave" },
+  { value: "landing", label: "Landing Page" },
+  { value: "manual", label: "Manual" },
+  { value: "import", label: "Importação" },
+];
+
+/**
  * Campos extras vindos de formulários de captação (ex.: Google Forms Likawave),
  * guardados em contacts.metadata. Rótulos amigáveis para exibição na ficha do
  * lead e do contato. Só os que tiverem valor são mostrados — contatos sem esses
